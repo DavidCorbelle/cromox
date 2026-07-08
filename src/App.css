@@ -5,6 +5,7 @@
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafb);
 }
+
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
@@ -21,14 +22,7 @@
   -webkit-text-size-adjust: 100%;
 }
 
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
+
 
 .logo {
   height: 6em;
@@ -81,6 +75,7 @@ button {
 button:hover {
   border-color: #396cd8;
 }
+
 button:active {
   border-color: #396cd8;
   background-color: #e8e8e8;
@@ -110,7 +105,45 @@ button {
     color: #ffffff;
     background-color: #0f0f0f98;
   }
+
   button:active {
     background-color: #0f0f0f69;
   }
+}
+
+
+
+/*----------------------*/
+
+
+.container {
+  margin: 0px;
+  display: grid;
+  grid-template-columns: 1fr 8fr;
+}
+
+#chatBox {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  width: 100%;
+  height: 80vh;
+  border: 1px solid white;
+  justify-content: end;
+  overflow-x: scroll;
+}
+
+body {
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+.botoneraNav{
+  display: flex;
+  flex-direction: column;
+}
+
+.debug-data{
+  word-wrap: anywhere;
 }

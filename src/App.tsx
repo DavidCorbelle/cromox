@@ -1,17 +1,39 @@
 import { useEffect, useState } from "react";
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import { useRef } from "react";
+import { message_types, suscription_types } from "./consts";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let intentos = 0;
+const initializeSocket = () => {
+  try {
+    return new WebSocket("wss://eventsub.wss.twitch.tv/ws")
+  } catch {
+    if (intentos < 10) {
+      console.log("reintento");
+      sleep(2000);
+      intentos++;
+      return initializeSocket()
+    } else {
+      throw new Error("No se ha podido inicializar el socket");
+    }
+  }
+
+}
 
 function App() {
-  const [socket] = useState(new WebSocket("wss://eventsub.wss.twitch.tv/ws"))
+  const [socket] = useState(initializeSocket)
   const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("test2");
+  const [messageChatBox, setMessageChatBox] = useState("");
   const [sessionID, setSessionID] = useState(undefined);
   const [dataLoaded, setDataLoaded] = useState(undefined);
+  const [messages, setMessages] = useState<Array<ChatMessage>>([]);
   const sessionIDtmp = useRef(undefined)
-  useEffect(() => { 
+
+
+
+  useEffect(() => {
     getDataLoaded();
   }, []);
   useEffect(() => {
@@ -26,7 +48,15 @@ function App() {
           sessionIDtmp.current = session_id;
           setSessionID(session_id);
         } else {
-          //setGreetMsg("Message from server "+ event.data)
+          let data = JSON.parse(event.data);
+          if (data.metadata.message_type == message_types.NOTIFICATION) {
+            if (data.metadata.subscription_type == suscription_types.CHAT_MESSAGE) {
+              add_message(data.payload.event);
+            }
+          }
+
+          setGreetMsg("Message from server " + event.data)
+
         }
 
       });
@@ -40,52 +70,45 @@ function App() {
 
   }, [sessionID]);
 
-  async function implement_suscribers(sessionId) {
+  function add_message(i: messageEvent) {
+    let newMessage: ChatMessage = {
+      chatter_name: i.chatter_user_name,
+      message: i.message.text
+    }
+    let arrayMessages = messages;
+    arrayMessages.push(newMessage);
+    setMessages(arrayMessages);
+    let chatBox = document.getElementById("chatBox");
+    const newNode = document.createElement("div");
+    newNode.textContent = newMessage.chatter_name + ": " + newMessage.message
+    chatBox?.appendChild(newNode)
+  }
+  async function implement_suscribers(sessionId: string) {
     console.log(sessionID);
     setGreetMsg(await invoke("implement_suscribers", { sessionId }));
   }
   async function getDataLoaded() {
     setDataLoaded(await invoke("start_data_config"));
   }
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
 
+  async function send_message_twitch() {
+    let message = messageChatBox;
+    await invoke("send_message_twitch", { message });
+    setMessageChatBox("");
   }
-
   return (
     <main className="container">
-      <h1>Welcome to Tauri + React</h1>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="botoneraNav">
+        <button>Chat</button>
+        <button>Comandos</button>
+        <p>{dataLoaded}</p>
+        <p className="debug-data">{greetMsg}</p>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{dataLoaded}</p>
-      <p>{greetMsg}</p>
+      <div>
+      <div id="chatBox"></div>
+      <input  onKeyDown={(e)=>{ if(e.key==="Enter"){send_message_twitch()}}}  value={messageChatBox} onInput={(e)=>{setMessageChatBox(e.target.value)}} id="chatBoxInpu"></input>
+      </div>
     </main>
   );
 }

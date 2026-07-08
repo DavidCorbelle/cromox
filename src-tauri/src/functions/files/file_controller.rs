@@ -1,4 +1,4 @@
-use crate::structs_custom;
+use crate::structs_custom::{self};
 use std::{
     fs::File,
     io::{Read, Write},
@@ -48,4 +48,29 @@ pub async fn save_config() -> Result<String, ()> {
     }
     std::env::set_var("configLoaded", "S");
     Ok(String::from("Config saved"))
+}
+
+
+pub async fn get_commands() -> Result<String, ()> {
+    let file: Result<File, std::io::Error> = File::open("commands.json");
+    Ok(String::from("loaded"))
+}
+
+pub async fn save_commands() -> Result<String, ()> {
+    println!("test1");
+    /*let array_commands:= Box::<structs_custom::BotCommand>::new_uninit();
+    let data_new_commands: structs_custom::BotCommandContainer = structs_custom::BotCommandContainer {
+        commands:array_commands
+    };
+    let data_string: String = serde_json::to_string(&data_new_commands).ok().unwrap_or(String::from("{}"));
+    let file: Result<File, std::io::Error> = File::open("commands.json");
+    if file.is_ok() {
+        let mut file_writable = file.ok().unwrap();
+        file_writable.write_all(data_string.as_bytes()).ok();
+    } else {
+        let mut file_writable = File::create("commands.json").ok().unwrap();
+        file_writable.write_all(data_string.as_bytes()).ok();
+    }
+    std::env::set_var("configLoaded", "S");*/
+    Ok(String::from("Commands saved"))
 }
