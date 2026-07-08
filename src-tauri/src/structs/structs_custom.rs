@@ -30,3 +30,19 @@ pub struct JSONConfig {
 }
 
 
+#[derive(Serialize)]
+pub struct BodyRequestSendMessageTwitch {
+    pub broadcaster_id: String,
+    pub sender_id: String,
+    pub message: String,
+}
+#[derive(Serialize)]
+pub struct BotCommandContainer{
+    pub commands:Box::<BotCommand>
+}
+
+#[derive(Serialize)]
+pub struct BotCommand{
+    comand_name:String
+
+}

@@ -1,4 +1,3 @@
-use futures::future::err;
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use reqwest::{self, Error, Response};
 use std::env;
@@ -8,11 +7,24 @@ mod file_controller;
 #[path = "structs/structs_custom.rs"]
 mod structs_custom;
 #[path = "functions/websocket/websocketTwitch.rs"]
-mod websocketTwitch;
+mod websocket_twitch;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[tauri::command]
+async fn send_message_twitch(message: &str) -> Result<String, ()> {
+    let response: Result<Response, reqwest::Error> =
+        websocket_twitch::send_message_twitch(message).await;
+    let response_string: String;
+    if response.is_ok() {
+        response_string = String::from("Mensaje enviado con exito");
+    } else {
+        response_string = String::from("Ha ocurrido un error");
+    }
+    Ok(response_string)
 }
 
 #[tauri::command]
@@ -22,9 +34,9 @@ async fn start_data_config() -> Result<String, ()> {
     let response: String;
     if data_config == "S" {
         let data_test: String = std::env::var("tokenBot").unwrap();
-        if data_test != ""{
+        if data_test != "" {
             response = String::from("LOADED");
-        }else{
+        } else {
             response = String::from("NODATA");
         }
     } else {
@@ -37,8 +49,9 @@ async fn start_data_config() -> Result<String, ()> {
 
 #[tauri::command]
 async fn implement_suscribers(sessionId: &str) -> Result<String, String> {
-    let response: Result<Response, Error> = websocketTwitch::implement_suscribers2(sessionId).await;
-    let response_processed = response.ok().unwrap().text().await.ok().unwrap();
+    let response: Result<Response, Error> =
+        websocket_twitch::implement_suscribers2(sessionId).await;
+    let response_processed: String = response.ok().unwrap().text().await.ok().unwrap();
 
     Ok(format!(
         "Hello, {}! You've been greeted from Rust2222222!",
@@ -55,7 +68,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             implement_suscribers,
-            start_data_config
+            start_data_config,
+            send_message_twitch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
