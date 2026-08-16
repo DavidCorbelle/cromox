@@ -4,8 +4,49 @@ use std::{
     io::{Read, Write},
 };
 
-pub async fn load_config() -> Result<String, ()> {
-    let file: Result<File, std::io::Error> = File::open("config.json");
+const TOKEN_PATH: &str = "token.json";
+const COMMANDS_PATH: &str = "commands.json";
+
+fn save_file_if_exist(data_string: String, file_name: &str) {
+    let path: String = get_file_path(file_name);
+    let file: Result<File, std::io::Error> = File::create(path);
+    if file.is_ok() {
+        let mut file_writable = file.ok().unwrap();
+        file_writable.write_all(data_string.as_bytes()).ok();
+    }
+}
+fn get_file_path(file_name: &str) -> String {
+    let path_to_user_data_tmp = std::env::var_os("HOME").unwrap();
+    let path_to_user_data = path_to_user_data_tmp.to_str().unwrap();
+    let path: String = format!("{path_to_user_data}/.local/share/com.tokudoku.cromox/{file_name}");
+    return path;
+}
+
+fn config_struct() -> structs_custom::JSONConfig {
+    let data_struct: structs_custom::JSONConfig = structs_custom::JSONConfig {
+        boradcaster_id: std::env::var("boradcaster_id")
+            .ok()
+            .unwrap_or(String::from("")),
+        bot_id: std::env::var("bot_id").ok().unwrap_or(String::from("")),
+        client_id: std::env::var("client_id").ok().unwrap_or(String::from("")),
+        client_secret: std::env::var("client_secret")
+            .ok()
+            .unwrap_or(String::from("")),
+        redirect_uri: std::env::var("redirect_uri")
+            .ok()
+            .unwrap_or(String::from("")),
+        token: std::env::var("tokenBot").ok().unwrap_or(String::from("")),
+    };
+    return data_struct;
+}
+
+pub async fn create_config_token(data_new_env: String) -> Result<String, ()> {
+    save_file_if_exist(data_new_env.clone(), TOKEN_PATH);
+    Ok(String::from(data_new_env))
+}
+
+pub async fn load_config_token() -> Result<String, ()> {
+    let file: Result<File, std::io::Error> = File::open(get_file_path(TOKEN_PATH));
     if file.is_ok() {
         let mut new_file: File = file.unwrap();
         let mut contents: String = String::new();
@@ -27,50 +68,127 @@ pub async fn load_config() -> Result<String, ()> {
 }
 
 pub async fn save_config() -> Result<String, ()> {
-    println!("test1");
-    let data_mew_env: structs_custom::JSONConfig = structs_custom::JSONConfig {
-        boradcaster_id: std::env::var("boradcaster_id").ok().unwrap_or(String::from("")),
-        bot_id: std::env::var("bot_id").ok().unwrap_or(String::from("")),
-        client_id: std::env::var("client_id").ok().unwrap_or(String::from("")),
-        client_secret: std::env::var("client_secret").ok().unwrap_or(String::from("")),
-        redirect_uri: std::env::var("redirect_uri").ok().unwrap_or(String::from("")),
-        token: std::env::var("tokenBot").ok().unwrap_or(String::from("")),
-    };
-    let data_string: String = serde_json::to_string(&data_mew_env).ok().unwrap_or(String::from("{}"));
-    let file: Result<File, std::io::Error> = File::open("config.json");
-    println!("test");
-    if file.is_ok() {
-        let mut file_writable = file.ok().unwrap();
-        file_writable.write_all(data_string.as_bytes()).ok();
-    } else {
-        let mut file_writable = File::create("config.json").ok().unwrap();
-        file_writable.write_all(data_string.as_bytes()).ok();
-    }
-    std::env::set_var("configLoaded", "S");
+    let data_new_env: structs_custom::JSONConfig = config_struct();
+    let data_string: String = serde_json::to_string(&data_new_env)
+        .ok()
+        .unwrap_or(String::from("{}"));
+    save_file_if_exist(data_string, TOKEN_PATH);
     Ok(String::from("Config saved"))
 }
 
-
-pub async fn get_commands() -> Result<String, ()> {
-    let file: Result<File, std::io::Error> = File::open("commands.json");
-    Ok(String::from("loaded"))
+pub async fn get_commands() -> Result<structs_custom::BotCommandContainer, String> {
+    let file: Result<File, std::io::Error> = File::open(get_file_path(COMMANDS_PATH));
+    let return_data: structs_custom::BotCommandContainer;
+    if file.is_ok() {
+        let mut new_file: File = file.unwrap();
+        let mut contents: String = String::new();
+        let _readed: Result<usize, std::io::Error> = new_file.read_to_string(&mut contents);
+        let data_new_env: Result<structs_custom::BotCommandContainer, serde_json::Error> =
+            serde_json::from_str(contents.as_str());
+        if data_new_env.is_ok() {
+            return_data = data_new_env.unwrap();
+        } else {
+            return Err(String::from("Error al cargar los datos"));
+        }
+    } else {
+        return Err(String::from("Error al cargar el archivo"));
+    }
+    Ok(return_data)
 }
 
-pub async fn save_commands() -> Result<String, ()> {
-    println!("test1");
-    /*let array_commands:= Box::<structs_custom::BotCommand>::new_uninit();
-    let data_new_commands: structs_custom::BotCommandContainer = structs_custom::BotCommandContainer {
-        commands:array_commands
-    };
-    let data_string: String = serde_json::to_string(&data_new_commands).ok().unwrap_or(String::from("{}"));
-    let file: Result<File, std::io::Error> = File::open("commands.json");
+pub async fn _get_commands_string() -> Result<String, ()> {
+    let file: Result<File, std::io::Error> = File::open(get_file_path(COMMANDS_PATH));
+    let string_retun: String;
     if file.is_ok() {
-        let mut file_writable = file.ok().unwrap();
-        file_writable.write_all(data_string.as_bytes()).ok();
+        let mut new_file: File = file.unwrap();
+        let mut contents: String = String::new();
+        let _readed: Result<usize, std::io::Error> = new_file.read_to_string(&mut contents);
+        let data_new_env: Result<structs_custom::BotCommandContainer, serde_json::Error> =
+            serde_json::from_str(contents.as_str());
+        if data_new_env.is_ok() {
+            string_retun = contents
+        } else {
+            string_retun = String::from("Error al cargar los datos");
+        }
     } else {
-        let mut file_writable = File::create("commands.json").ok().unwrap();
-        file_writable.write_all(data_string.as_bytes()).ok();
+        string_retun = String::from("Error al cargar el archivo");
     }
-    std::env::set_var("configLoaded", "S");*/
+    Ok(string_retun)
+}
+
+pub async fn save_new_command(data: String) -> Result<String, ()> {
+    let commands: Result<structs_custom::BotCommandContainer, String> = get_commands().await;
+    let mut commands_ok: structs_custom::BotCommandContainer;
+    let mut new_command: structs_custom::CommandStruct =
+        serde_json::from_str(&data.as_str()).unwrap();
+    if commands.is_ok() {
+        commands_ok = commands.unwrap();
+        let last_id: u16;
+        if commands_ok.commands.len() > 0 {
+            let last_id_command: Option<&structs_custom::CommandStruct> =
+                commands_ok.commands.last();
+            last_id = last_id_command.unwrap().command_id;
+        } else {
+            last_id = 0;
+        }
+        new_command.command_id = last_id + 1;
+        commands_ok.commands.push(new_command);
+    } else {
+        new_command.command_id = 1;
+        commands_ok = structs_custom::BotCommandContainer {
+            commands: vec![new_command],
+        };
+    }
+    let data_string: String = serde_json::to_string(&commands_ok)
+        .ok()
+        .unwrap_or(String::from("{}"));
+    save_file_if_exist(data_string, COMMANDS_PATH);
+    Ok(String::from("Ok"))
+}
+
+pub async fn _save_commands() -> Result<String, ()> {
+    let mut command_list: Vec<structs_custom::CommandStruct> = vec![];
+    command_list.push(structs_custom::CommandStruct {
+        command_id: (command_list.len().to_string().parse::<u16>()).unwrap() + 1,
+        command_name: String::from("nombreComando"),
+        trigger: String::from("activador"),
+        response_text: String::from("TextoRespueta"),
+        sound_dir: String::from("DirectorioSonido"),
+        content_type: structs_custom::CommandStructContent {
+            content_type: String::from("TextoPosicion"),
+            position_data: Some(
+                [structs_custom::CommandStructContentPositionData {
+                    position: String::from("1"),
+                    param_name: String::from("user"),
+                }]
+                .to_vec(),
+            ),
+        },
+        permits: structs_custom::CommandStructPerms {
+            content_type: String::from("AllAccess"),
+            rol_permit: Default::default(),
+            user_permit: Default::default(),
+        },
+        integration: Some(structs_custom::CommandStructIntegration {
+            http_endpoint: Some(String::from("http://localhost")),
+            use_integration: Default::default(),
+            data_integration: Default::default(),
+        }),
+        point_cost: Default::default(),
+        cooldown: Some(structs_custom::CommandStructCooldown {
+            units: 25,
+            type_unit: String::from("Weeks"),
+        }),
+        enabled: true,
+    });
+    let data_new_commands: structs_custom::BotCommandContainer =
+        structs_custom::BotCommandContainer {
+            commands: command_list,
+        };
+    let data_string: String = serde_json::to_string(&data_new_commands)
+        .ok()
+        .unwrap_or(String::from("{}"));
+    save_file_if_exist(data_string, COMMANDS_PATH);
+    std::env::set_var("configLoaded", "S");
     Ok(String::from("Commands saved"))
 }

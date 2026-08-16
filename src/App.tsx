@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import { useRef } from "react";
-import { message_types, suscription_types } from "./consts";
+import { MENU_ACTUAL, message_types, suscription_types } from "./consts";
+import ChatBox from "./components/chat/ChatBox";
+import TokenTwitchConfig from "./components/configMenu/TokenTwitchConfig";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let intentos = 0;
@@ -28,6 +30,7 @@ function App() {
   const [messageChatBox, setMessageChatBox] = useState("");
   const [sessionID, setSessionID] = useState(undefined);
   const [dataLoaded, setDataLoaded] = useState(undefined);
+  const [currentMenu, setCurrentMenu] = useState(MENU_ACTUAL.CHAT);
   const [messages, setMessages] = useState<Array<ChatMessage>>([]);
   const sessionIDtmp = useRef(undefined)
 
@@ -36,6 +39,7 @@ function App() {
   useEffect(() => {
     getDataLoaded();
   }, []);
+
   useEffect(() => {
     if (dataLoaded != undefined) {
       // Connection opened
@@ -51,6 +55,7 @@ function App() {
           let data = JSON.parse(event.data);
           if (data.metadata.message_type == message_types.NOTIFICATION) {
             if (data.metadata.subscription_type == suscription_types.CHAT_MESSAGE) {
+              //check_listener(data.payload.event)
               add_message(data.payload.event);
             }
           }
@@ -96,19 +101,70 @@ function App() {
     await invoke("send_message_twitch", { message });
     setMessageChatBox("");
   }
+
+  function setMessageChatBoxIntermedio(e: any) {
+    setMessageChatBox(e.target.value)
+  }
+
+  function save_token_twitch_config() {
+    var client_id_container = document.getElementById("client_id") as unknown;
+    var client_id = client_id_container as HTMLInputElement;
+    var client_secret_container = document.getElementById("client_secret") as unknown;
+    var client_secret = client_secret_container as HTMLInputElement;
+    var redirect_uri_container = document.getElementById("redirect_uri") as unknown;
+    var redirect_uri = redirect_uri_container as HTMLInputElement;
+    var token_container = document.getElementById("token") as unknown;
+    var token = token_container as HTMLInputElement;
+    var boradcaster_id_container = document.getElementById("boradcaster_id") as unknown;
+    var boradcaster_id = boradcaster_id_container as HTMLInputElement;
+    var bot_id_container = document.getElementById("bot_id") as unknown;
+    var bot_id = bot_id_container as HTMLInputElement;
+
+    var dataJSON = {
+      client_id: client_id.value,
+      client_secret: client_secret.value,
+      redirect_uri: redirect_uri.value,
+      token: token.value,
+      boradcaster_id: boradcaster_id.value,
+      bot_id: bot_id.value
+    };
+    var newConfigToken = JSON.stringify(dataJSON);
+
+    invoke("save_new_data_token", { newConfigToken }).then(() => getDataLoaded());
+  }
+
+  function renderCurrentView() {
+    switch (currentMenu) {
+      case MENU_ACTUAL.CONFIGURACION:
+        return (<TokenTwitchConfig
+          save_token_twitch_config={save_token_twitch_config}
+        ></TokenTwitchConfig>)
+      default:
+        break;
+    }
+  }
+
   return (
     <main className="container">
 
       <div className="botoneraNav">
-        <button>Chat</button>
-        <button>Comandos</button>
+        <button onClick={() => setCurrentMenu(MENU_ACTUAL.CHAT)}>Chat</button>
+        <button onClick={() => setCurrentMenu(MENU_ACTUAL.COMANDOS)}>Comandos</button>
+        <button onClick={() => setCurrentMenu(MENU_ACTUAL.CONFIGURACION)}>CONFIGURACION</button>
         <p>{dataLoaded}</p>
         <p className="debug-data">{greetMsg}</p>
       </div>
-      <div>
-      <div id="chatBox"></div>
-      <input  onKeyDown={(e)=>{ if(e.key==="Enter"){send_message_twitch()}}}  value={messageChatBox} onInput={(e)=>{setMessageChatBox(e.target.value)}} id="chatBoxInpu"></input>
+      <div hidden={currentMenu != MENU_ACTUAL.CHAT}>
+        <ChatBox
+          messageChatBox={messageChatBox}
+          send_message_twitch={send_message_twitch}
+          setMessageChatBoxIntermedio={setMessageChatBoxIntermedio}
+        >
+
+        </ChatBox>
       </div>
+      {renderCurrentView()}
+
     </main>
   );
 }
