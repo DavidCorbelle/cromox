@@ -1,7 +1,6 @@
-use crate::structs_custom::{self};
+use crate::structs_custom::{self, BotCommandContainer};
 use std::{
-    fs::File,
-    io::{Read, Write},
+    fs::File, io::{Read, Write},
 };
 
 const TOKEN_PATH: &str = "token.json";
@@ -76,7 +75,7 @@ pub async fn save_config() -> Result<String, ()> {
     Ok(String::from("Config saved"))
 }
 
-pub async fn get_commands() -> Result<structs_custom::BotCommandContainer, String> {
+pub fn get_commands() -> Option<structs_custom::BotCommandContainer> {
     let file: Result<File, std::io::Error> = File::open(get_file_path(COMMANDS_PATH));
     let return_data: structs_custom::BotCommandContainer;
     if file.is_ok() {
@@ -87,16 +86,13 @@ pub async fn get_commands() -> Result<structs_custom::BotCommandContainer, Strin
             serde_json::from_str(contents.as_str());
         if data_new_env.is_ok() {
             return_data = data_new_env.unwrap();
-        } else {
-            return Err(String::from("Error al cargar los datos"));
+            return Some(return_data);
         }
-    } else {
-        return Err(String::from("Error al cargar el archivo"));
     }
-    Ok(return_data)
+    return Default::default();
 }
 
-pub async fn _get_commands_string() -> Result<String, ()> {
+pub async fn get_commands_string() -> Result<String, ()> {
     let file: Result<File, std::io::Error> = File::open(get_file_path(COMMANDS_PATH));
     let string_retun: String;
     if file.is_ok() {
@@ -111,84 +107,65 @@ pub async fn _get_commands_string() -> Result<String, ()> {
             string_retun = String::from("Error al cargar los datos");
         }
     } else {
-        string_retun = String::from("Error al cargar el archivo");
+        string_retun = String::from("{ \"response\": \"Error al cargar el archivo\"}");
     }
     Ok(string_retun)
 }
 
 pub async fn save_new_command(data: String) -> Result<String, ()> {
-    let commands: Result<structs_custom::BotCommandContainer, String> = get_commands().await;
-    let mut commands_ok: structs_custom::BotCommandContainer;
+    let mut comands_container: structs_custom::BotCommandContainer = get_commands().unwrap_or_default();
     let mut new_command: structs_custom::CommandStruct =
         serde_json::from_str(&data.as_str()).unwrap();
-    if commands.is_ok() {
-        commands_ok = commands.unwrap();
+    if comands_container != BotCommandContainer::default() {
         let last_id: u16;
-        if commands_ok.commands.len() > 0 {
+        if comands_container.commands.len() > 0 {
             let last_id_command: Option<&structs_custom::CommandStruct> =
-                commands_ok.commands.last();
+                comands_container.commands.last();
             last_id = last_id_command.unwrap().command_id;
         } else {
             last_id = 0;
         }
         new_command.command_id = last_id + 1;
-        commands_ok.commands.push(new_command);
+        comands_container.commands.push(new_command);
     } else {
         new_command.command_id = 1;
-        commands_ok = structs_custom::BotCommandContainer {
+        comands_container = structs_custom::BotCommandContainer {
             commands: vec![new_command],
         };
     }
-    let data_string: String = serde_json::to_string(&commands_ok)
+    let data_string: String = serde_json::to_string(&comands_container)
         .ok()
         .unwrap_or(String::from("{}"));
     save_file_if_exist(data_string, COMMANDS_PATH);
     Ok(String::from("Ok"))
 }
 
-pub async fn _save_commands() -> Result<String, ()> {
-    let mut command_list: Vec<structs_custom::CommandStruct> = vec![];
-    command_list.push(structs_custom::CommandStruct {
-        command_id: (command_list.len().to_string().parse::<u16>()).unwrap() + 1,
-        command_name: String::from("nombreComando"),
-        trigger: String::from("activador"),
-        response_text: String::from("TextoRespueta"),
-        sound_dir: String::from("DirectorioSonido"),
-        content_type: structs_custom::CommandStructContent {
-            content_type: String::from("TextoPosicion"),
-            position_data: Some(
-                [structs_custom::CommandStructContentPositionData {
-                    position: String::from("1"),
-                    param_name: String::from("user"),
-                }]
-                .to_vec(),
-            ),
-        },
-        permits: structs_custom::CommandStructPerms {
-            content_type: String::from("AllAccess"),
-            rol_permit: Default::default(),
-            user_permit: Default::default(),
-        },
-        integration: Some(structs_custom::CommandStructIntegration {
-            http_endpoint: Some(String::from("http://localhost")),
-            use_integration: Default::default(),
-            data_integration: Default::default(),
-        }),
-        point_cost: Default::default(),
-        cooldown: Some(structs_custom::CommandStructCooldown {
-            units: 25,
-            type_unit: String::from("Weeks"),
-        }),
-        enabled: true,
-    });
-    let data_new_commands: structs_custom::BotCommandContainer =
-        structs_custom::BotCommandContainer {
-            commands: command_list,
-        };
-    let data_string: String = serde_json::to_string(&data_new_commands)
-        .ok()
-        .unwrap_or(String::from("{}"));
-    save_file_if_exist(data_string, COMMANDS_PATH);
-    std::env::set_var("configLoaded", "S");
-    Ok(String::from("Commands saved"))
+pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
+    let mut commands: structs_custom::BotCommandContainer = get_commands().unwrap_or_default();
+    let new_command: structs_custom::CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
+    if commands != BotCommandContainer::default() {
+        let searcher: Vec<structs_custom::CommandStruct> = commands.commands.clone();
+        let index = searcher.iter().position(|r| r.command_id == id).unwrap();
+        commands.commands[index] = new_command;
+        let data_string: String = serde_json::to_string(&commands)
+            .ok()
+            .unwrap_or(String::from("{}"));
+        save_file_if_exist(data_string, COMMANDS_PATH);
+    }
+    Ok(String::from("Ok"))
+}
+
+pub async fn delete_command(id: u16) -> Result<String, ()> {
+    let mut commands: structs_custom::BotCommandContainer = get_commands().unwrap_or_default();
+
+    if commands != BotCommandContainer::default() {
+        let searcher: Vec<structs_custom::CommandStruct> = commands.commands.clone();
+        let index = searcher.iter().position(|r| r.command_id == id).unwrap();
+        commands.commands.remove(index);
+        let data_string: String = serde_json::to_string(&commands)
+            .ok()
+            .unwrap_or(String::from("{}"));
+        save_file_if_exist(data_string, COMMANDS_PATH);
+    }
+    Ok(String::from("Ok"))
 }

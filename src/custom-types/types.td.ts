@@ -4,7 +4,6 @@ type ChatMessage = {
 }
 
 
-
 type messageEventData = {
     "text": string,
     "fragments": [
@@ -49,21 +48,38 @@ type messageEvent = {
     "channel_points_animation_id": any
 }
 
-
-type CommandBot = {
-    name: String,
-    trigger: String,
-    content_type: CommandStructContentFull | CommandStructContentPosition,
-    response_text: String,
-    sound_dir: String
+type Command  = {
+     command_id: Number,
+      command_name: string,
+      trigger: string,
+      content_type: CommandStructContent,
+      response_text: string|null,
+      sound_dir: string|null,
+      permits: CommandStructPermitType,
+      integration: CommandStrucIntegrationType|null,
+      cooldown: CommandStrucCooldownType|null,
+      point_cost: number,
+      enabled: boolean
 }
 
-type CommandStructContentFull = {
-    content_type: String
+type CommandStructPermitType = {
+        content_type: string,
+        rol_permit: Array<string>|null,
+        user_permit: Array<string>|null
 }
-type CommandStructContentPosition = {
+type CommandStrucIntegrationType = {
+        http_endpoint: string,
+        use_integration: string|null,
+        data_integration: null
+}
+type CommandStrucCooldownType = {
+       units: number,
+       type_unit: string
+}
+
+type CommandStructContent= {
     content_type: String,
-    position_data: Array<CommandStructContentPositionData>,
+    position_data: Array<CommandStructContentPositionData> | null,
 }
 type CommandStructContentPositionData = {
     position: String,

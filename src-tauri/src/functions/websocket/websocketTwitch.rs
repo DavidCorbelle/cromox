@@ -12,10 +12,7 @@ pub async fn implement_suscribers2(session_id: &str) -> Result<Response, reqwest
     let client: Client = reqwest::Client::new();
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    headers.insert(
-        "Client-Id",
-        client_id.parse().unwrap(),
-    );
+    headers.insert("Client-Id", client_id.parse().unwrap());
     headers.insert(
         "Authorization",
         format!("Bearer {}", token_bot).parse().unwrap(),
@@ -43,8 +40,7 @@ pub async fn implement_suscribers2(session_id: &str) -> Result<Response, reqwest
     Ok(response)
 }
 
-
-pub async fn send_message_twitch(message:&str) -> Result<Response, reqwest::Error>{
+pub async fn send_message_twitch(message: &str) -> Result<Response, reqwest::Error> {
     let client: Client = reqwest::Client::new();
     let boradcaster_id: String = std::env::var("boradcaster_id").unwrap();
     let bot_id: String = std::env::var("bot_id").unwrap();
@@ -53,19 +49,17 @@ pub async fn send_message_twitch(message:&str) -> Result<Response, reqwest::Erro
     const URL: &str = "https://api.twitch.tv/helix/chat/messages";
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    headers.insert(
-        "Client-Id",
-        client_id.parse().unwrap(),
-    );
+    headers.insert("Client-Id", client_id.parse().unwrap());
     headers.insert(
         "Authorization",
         format!("Bearer {}", token_bot).parse().unwrap(),
     );
-    let json_data:structs_custom::BodyRequestSendMessageTwitch = structs_custom::BodyRequestSendMessageTwitch {
+    let json_data: structs_custom::BodyRequestSendMessageTwitch =
+        structs_custom::BodyRequestSendMessageTwitch {
             broadcaster_id: String::from(boradcaster_id),
             sender_id: bot_id,
-            message: String::from(message)
-    };
+            message: String::from(message),
+        };
     let json_string: Option<String> = serde_json::to_string(&json_data).ok();
     let json_clone: String = String::from(json_string.unwrap()).replace("type_string", "type");
     let response: Response = client
@@ -75,6 +69,4 @@ pub async fn send_message_twitch(message:&str) -> Result<Response, reqwest::Erro
         .send()
         .await?;
     Ok(response)
-
 }
-
