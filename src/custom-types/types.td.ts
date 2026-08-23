@@ -54,7 +54,7 @@ type Command  = {
       trigger: string,
       content_type: CommandStructContent,
       response_text: string|null,
-      sound_dir: string|null,
+      sound: CommandStructSoundData|null,
       permits: CommandStructPermitType,
       integration: CommandStrucIntegrationType|null,
       cooldown: CommandStrucCooldownType|null,
@@ -74,7 +74,7 @@ type CommandStrucIntegrationType = {
 }
 type CommandStrucCooldownType = {
        units: number,
-       type_unit: string
+       type_unit: "SECONDS"
 }
 
 type CommandStructContent= {
@@ -84,4 +84,15 @@ type CommandStructContent= {
 type CommandStructContentPositionData = {
     position: String,
     param_name: String
+}
+
+type CommandStructSoundData = {
+    sound_dir: String,
+    sound_volume: Number
+}
+
+type CommandUses = {
+    userId: String,
+    lastTimeUsed: Date,
+    commandIdUsed: Number
 }

@@ -49,7 +49,7 @@ pub struct CommandStruct {
     pub trigger: String,
     pub content_type: CommandStructContent,
     pub response_text: String,
-    pub sound_dir: String,
+    pub sound: CommandStructSound,
     pub permits: CommandStructPerms,
     pub integration: Option<CommandStructIntegration>,
     pub cooldown: Option<CommandStructCooldown>,
@@ -86,4 +86,10 @@ pub struct CommandStructIntegration {
 pub struct CommandStructCooldown {
     pub units: u16,
     pub type_unit: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
+pub struct CommandStructSound {
+    pub sound_dir: String,
+    pub sound_volume: u8,
 }

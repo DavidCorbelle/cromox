@@ -67,12 +67,15 @@ const CommandList = ({ commands, status_sub_menu, set_status_sub_menu, create_co
                                 <input name="trigger" type="text" defaultValue={current_command != undefined ? current_command.trigger : ""}></input>
                             </label>
                             <label>Respuesta
-                                <input name="response_text" type="text" defaultValue={current_command != undefined ? current_command.response_text as string : ""}></input>
+                                <textarea name="response_text" defaultValue={current_command != undefined ? current_command.response_text as string : ""}></textarea>
                             </label>
                             <label>Ruta Sonido
-                                <input name="sound_dir" id="command_form_sound_dir" type="text" defaultValue={current_command != undefined ? current_command.sound_dir as string : ""}></input>
+                                <input name="sound_dir" id="command_form_sound_dir" type="text" defaultValue={current_command != undefined ? current_command.sound?.sound_dir as string : ""}></input>
                                 {/*Revisar como conseguir la ruta del archivo*/}
                                 <button type="button" onClick={() => test()}>Elegir Ruta</button>
+                            </label>
+                            <label>Volumen Sonido
+                                <input name="sound_dir" id="command_form_sound_dir" type="number" min={0} max={200} defaultValue={current_command != undefined ? current_command.sound?.sound_volume as number : 100}></input>                                
                             </label>
                             <label>Tiempo Cooldown
                                 <input name="cooldown" type="number" defaultValue={current_command != undefined ? current_command.cooldown?.units : ""}></input>

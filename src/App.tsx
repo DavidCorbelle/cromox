@@ -6,6 +6,7 @@ import { MENU_ACTUAL, MENU_COMANDOS, message_types, suscription_types, TIPO_COMA
 import ChatBox from "./components/chat/ChatBox";
 import TokenTwitchConfig from "./components/configMenu/TokenTwitchConfig";
 import CommandList from "./components/configMenu/CommandList";
+import { canIUseCommand } from "./functions/function_commands";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let intentos = 0;
@@ -37,6 +38,7 @@ function App() {
   const commands = useRef<Array<Command>>([])
   const [currentCommand, setCurrentCommand] = useState<undefined | Command>(undefined);
   const [forceUpdate, setForceUpdate] = useState<boolean>(true);
+  const commandUses = useRef<Array<CommandUses>>([]);
   const sessionIDtmp = useRef(undefined)
   const botIdChat = useRef("")
 
@@ -116,13 +118,17 @@ function App() {
   function try_command(i: messageEvent) {
     let messageTextCommand = i.message.text;
     let command_string: string = messageTextCommand.split(" ")[0].replace("!", "");
-    console.log(messageTextCommand);
-    console.log(command_string);
-    console.log(commands);
     let find = commands.current.filter((e) => { return (e.trigger == command_string) })
-    console.log(find);
     if (find.length > 0) {
-      invoke('execute_command', { messageTextCommand });
+      let command = find[0];
+      //TEST if command used  
+      let usable = canIUseCommand(command.command_id, i.chatter_user_id, command.cooldown, commandUses.current);
+      if (usable) {
+        commandUses.current.push({commandIdUsed: command.command_id, lastTimeUsed: new Date(), userId: i.chatter_user_id});
+        invoke('execute_command', { messageTextCommand });
+
+      }
+
     }
     add_message(i);
   }
@@ -183,6 +189,7 @@ function App() {
   function prepare_data_command(data: FormData): Command {
     let commands_data = commands.current;
     let command_id = (commands != undefined && commands_data.length > 0 ? commands_data[commands_data.length - 1].command_id as number + 1 : 1);
+    console.log("dataCooldown", (Number.parseInt(data.get("cooldown") as string)));
     let new_command: Command = {
       command_id: command_id,
       command_name: data.get("command_name") as string,
@@ -192,7 +199,10 @@ function App() {
         position_data: null
       },
       response_text: data.get("response_text") as string,
-      sound_dir: data.get("sound_dir") as string,
+      sound: {
+        sound_dir: data.get("sound_dir") as string,
+        sound_volume: isNaN(Number.parseInt(data.get("sound_volume") as string)) ? 100 : Number.parseInt(data.get("sound_volume") as string) * 100,
+      },
       permits: {
         content_type: "AllAccess",
         rol_permit: null,
@@ -200,8 +210,8 @@ function App() {
       },
       integration: null,
       cooldown: {
-        units: isNaN(Number.parseInt(data.get("cooldown") as string)) ? 0 : Number.parseInt(data.get("point_cost") as string),
-        type_unit: "Seconds"
+        units: isNaN(Number.parseInt(data.get("cooldown") as string)) ? 0:  (Number.parseInt(data.get("cooldown") as string))  ,
+        type_unit: "SECONDS"
       },
       point_cost: Number.parseInt(data.get("point_cost") as string),
       enabled: data.get("enabled") != null
@@ -240,7 +250,9 @@ function App() {
     e.preventDefault();
 
     var formData = new FormData(e.target);
+    console.log(formData.get("cooldown"));
     let new_command = prepare_data_command(formData);
+    console.log(new_command.cooldown?.units);
     new_command.command_id = commandId;
     let tmpCommands: Array<Command>
     if (commands != undefined) {
@@ -266,7 +278,7 @@ function App() {
 
   function renderCurrentView() {
     switch (currentMenu) {
-      case MENU_ACTUAL.CONFIGURACION:
+      case MENU_ACTUAL.TOKENS:
         return (<TokenTwitchConfig
           save_token_twitch_config={save_token_twitch_config}
         ></TokenTwitchConfig>)
@@ -293,7 +305,7 @@ function App() {
       <div className="botoneraNav">
         <button onClick={() => setCurrentMenu(MENU_ACTUAL.CHAT)}>Chat</button>
         <button onClick={() => setCurrentMenu(MENU_ACTUAL.COMANDOS)}>Comandos</button>
-        <button onClick={() => setCurrentMenu(MENU_ACTUAL.CONFIGURACION)}>CONFIGURACION</button>
+        <button onClick={() => setCurrentMenu(MENU_ACTUAL.TOKENS)}>TOKENS</button>
         <p>{dataLoaded}</p>
         <p className="debug-data">{greetMsg}</p>
       </div>

@@ -10,7 +10,7 @@ export const message_types ={
 export const MENU_ACTUAL = {
     CHAT: 1,
     COMANDOS:2,
-    CONFIGURACION:3
+    TOKENS:3
 }
 
 export const MENU_COMANDOS = {
@@ -24,3 +24,7 @@ export const TIPO_COMANDO_TEXTO ={
     POSITION_TEXT: "PositionText"
 }
 
+
+export const COOLDOWN_MULT = {
+    "SECONDS": 1000
+}
