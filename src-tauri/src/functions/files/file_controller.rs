@@ -1,10 +1,12 @@
 use crate::structs_custom::{self, BotCommandContainer};
 use std::{
-    fs::File, io::{Read, Write},
+    fs::File,
+    io::{Read, Write},
 };
 
 const TOKEN_PATH: &str = "token.json";
 const COMMANDS_PATH: &str = "commands.json";
+const POINTS_PATH: &str = "points.json";
 
 fn save_file_if_exist(data_string: String, file_name: &str) {
     let path: String = get_file_path(file_name);
@@ -113,7 +115,8 @@ pub async fn get_commands_string() -> Result<String, ()> {
 }
 
 pub async fn save_new_command(data: String) -> Result<String, ()> {
-    let mut comands_container: structs_custom::BotCommandContainer = get_commands().unwrap_or_default();
+    let mut comands_container: structs_custom::BotCommandContainer =
+        get_commands().unwrap_or_default();
     let mut new_command: structs_custom::CommandStruct =
         serde_json::from_str(&data.as_str()).unwrap();
     if comands_container != BotCommandContainer::default() {
@@ -168,4 +171,28 @@ pub async fn delete_command(id: u16) -> Result<String, ()> {
         save_file_if_exist(data_string, COMMANDS_PATH);
     }
     Ok(String::from("Ok"))
+}
+
+pub fn get_all_points_user() -> Option<Vec<structs_custom::PointUserTwitchStruct>> {
+    let file: Result<File, std::io::Error> = File::open(get_file_path(POINTS_PATH));
+    let return_data: Vec<structs_custom::PointUserTwitchStruct>;
+    if file.is_ok() {
+        let mut new_file: File = file.unwrap();
+        let mut contents: String = String::new();
+        let _readed: Result<usize, std::io::Error> = new_file.read_to_string(&mut contents);
+        let data_new_env: Result<Vec<structs_custom::PointUserTwitchStruct>, serde_json::Error> =
+            serde_json::from_str(contents.as_str());
+        if data_new_env.is_ok() {
+            return_data = data_new_env.unwrap();
+            return Some(return_data);
+        }
+    }
+    return Default::default();
+}
+
+pub fn save_all_points_user(points_file_data: Vec<structs_custom::PointUserTwitchStruct>) {
+    let data_string: String = serde_json::to_string(&points_file_data)
+        .ok()
+        .unwrap_or(String::from("{}"));
+    save_file_if_exist(data_string, POINTS_PATH);
 }

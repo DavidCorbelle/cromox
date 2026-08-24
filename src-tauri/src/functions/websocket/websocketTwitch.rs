@@ -1,15 +1,12 @@
 use reqwest::{header::CONTENT_TYPE, Client, Response};
 use tauri::http::HeaderMap;
+use tokio;
 
 use crate::structs_custom;
 
-pub async fn implement_suscribers2(session_id: &str) -> Result<Response, reqwest::Error> {
-    let boradcaster_id: String = std::env::var("boradcaster_id").unwrap();
-    let bot_id: String = std::env::var("bot_id").unwrap();
+fn get_auth_headers() -> HeaderMap {
     let client_id: String = std::env::var("client_id").unwrap();
     let token_bot: String = std::env::var("tokenBot").unwrap();
-    const URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
-    let client: Client = reqwest::Client::new();
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
     headers.insert("Client-Id", client_id.parse().unwrap());
@@ -17,6 +14,14 @@ pub async fn implement_suscribers2(session_id: &str) -> Result<Response, reqwest
         "Authorization",
         format!("Bearer {}", token_bot).parse().unwrap(),
     );
+    return headers;
+}
+pub async fn implement_suscribers2(session_id: &str) -> Result<Response, reqwest::Error> {
+    let boradcaster_id: String = std::env::var("boradcaster_id").unwrap();
+    let bot_id: String = std::env::var("bot_id").unwrap();
+    const URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
+    let client: Client = reqwest::Client::new();
+    let headers: HeaderMap = get_auth_headers();
     let json_fake: structs_custom::BodyRequestSuscriber = structs_custom::BodyRequestSuscriber {
         type_string: String::from("channel.chat.message"),
         version: String::from("1"),
@@ -44,16 +49,9 @@ pub async fn send_message_twitch(message: &str) -> Result<Response, reqwest::Err
     let client: Client = reqwest::Client::new();
     let boradcaster_id: String = std::env::var("boradcaster_id").unwrap();
     let bot_id: String = std::env::var("bot_id").unwrap();
-    let client_id: String = std::env::var("client_id").unwrap();
-    let token_bot: String = std::env::var("tokenBot").unwrap();
+
     const URL: &str = "https://api.twitch.tv/helix/chat/messages";
-    let mut headers: HeaderMap = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    headers.insert("Client-Id", client_id.parse().unwrap());
-    headers.insert(
-        "Authorization",
-        format!("Bearer {}", token_bot).parse().unwrap(),
-    );
+    let headers: HeaderMap = get_auth_headers();
     let json_data: structs_custom::BodyRequestSendMessageTwitch =
         structs_custom::BodyRequestSendMessageTwitch {
             broadcaster_id: String::from(boradcaster_id),
@@ -69,4 +67,15 @@ pub async fn send_message_twitch(message: &str) -> Result<Response, reqwest::Err
         .send()
         .await?;
     Ok(response)
+}
+
+
+pub async fn get_chatters_twitch() -> Response {
+    let client: Client = reqwest::Client::new();
+    let boradcaster_id: String = std::env::var("boradcaster_id").unwrap();
+    let bot_id: String = std::env::var("bot_id").unwrap();
+    let url: String = format!("https://api.twitch.tv/helix/chat/chatters/broadcaster_id={boradcaster_id}&moderator_id={bot_id}&first=1000");
+    let headers: HeaderMap = get_auth_headers();
+    let response: Response = client.get(url).headers(headers).send().await.unwrap();
+    return response;
 }

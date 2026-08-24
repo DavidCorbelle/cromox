@@ -7,6 +7,8 @@ use std::env;
 mod file_controller;
 #[path = "structs/structs_custom.rs"]
 mod structs_custom;
+#[path = "structs/structs_twitch_api.rs"]
+mod structs_twitch_api;
 #[path = "functions/websocket/websocketTwitch.rs"]
 mod websocket_twitch;
 #[path = "functions/commandsTwitch/command_twitch.rs"]
@@ -120,7 +122,7 @@ async fn implement_suscribers(sessionId: &str) -> Result<String, String> {
     let response: Result<Response, Error> =
         websocket_twitch::implement_suscribers2(sessionId).await;
     let response_processed: String = response.ok().unwrap().text().await.ok().unwrap();
-
+    tokio::spawn(command_twitch::twitch_points());
     Ok(format!(
         "Hello, {}! You've been greeted from Rust2222222!",
         response_processed
