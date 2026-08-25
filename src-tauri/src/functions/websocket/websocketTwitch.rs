@@ -1,6 +1,5 @@
 use reqwest::{header::CONTENT_TYPE, Client, Response};
 use tauri::http::HeaderMap;
-use tokio;
 
 use crate::structs_custom;
 
@@ -69,12 +68,11 @@ pub async fn send_message_twitch(message: &str) -> Result<Response, reqwest::Err
     Ok(response)
 }
 
-
 pub async fn get_chatters_twitch() -> Response {
     let client: Client = reqwest::Client::new();
     let boradcaster_id: String = std::env::var("boradcaster_id").unwrap();
     let bot_id: String = std::env::var("bot_id").unwrap();
-    let url: String = format!("https://api.twitch.tv/helix/chat/chatters/broadcaster_id={boradcaster_id}&moderator_id={bot_id}&first=1000");
+    let url: String = format!("https://api.twitch.tv/helix/chat/chatters?broadcaster_id={boradcaster_id}&moderator_id={bot_id}&first=1000");
     let headers: HeaderMap = get_auth_headers();
     let response: Response = client.get(url).headers(headers).send().await.unwrap();
     return response;

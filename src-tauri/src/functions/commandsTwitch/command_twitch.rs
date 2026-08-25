@@ -1,9 +1,10 @@
 use crate::file_controller;
-use crate::structs_custom::{self};
+use crate::structs_custom::{self, PointUserTwitchStruct};
 use crate::structs_twitch_api::{self};
 use crate::websocket_twitch;
 use std::fs::File;
 use std::io::BufReader;
+use futures::StreamExt;
 use tokio::time::{sleep, Duration};
 
 pub async fn execute_command(message_text_command: &str) -> Result<String, String> {
@@ -45,9 +46,9 @@ async fn reproduce_sound(sound_dir: String, sound_volume: u8) -> Result<String, 
 
 pub async fn twitch_points() {
     loop {
-        let mut changed: bool = false;
-        let mut points_file: Vec<structs_custom::PointUserTwitchStruct> =
-            file_controller::get_all_points_user().unwrap();
+        let points_file: Vec<structs_custom::PointUserTwitchStruct> =
+            file_controller::get_all_points_user().await.unwrap();
+        let mut points_update: Vec<structs_custom::PointUserTwitchStruct> = vec![];
         let chatters: Vec<structs_twitch_api::ChatterList> = get_chatters_list().await;
         let old_chatters_string: String =
             std::env::var("old_chatters").unwrap_or(String::from("None"));
@@ -59,7 +60,6 @@ pub async fn twitch_points() {
                     .iter()
                     .position(|r: &structs_twitch_api::ChatterList| r.user_id == n.user_id);
                 if index.is_some() {
-                    changed = true;
                     let index_file: Option<usize> =
                         points_file
                             .iter()
@@ -67,41 +67,47 @@ pub async fn twitch_points() {
                                 r.user_id == n.user_id
                             });
                     if index_file.is_some() {
-                        points_file[index_file.unwrap()].points += 1;
-                        points_file[index_file.unwrap()].last_known_name = n.user_name;
+                        let mut point_name: PointUserTwitchStruct =
+                            points_file[index_file.unwrap()].clone();
+                        point_name.points += 1;
+                        point_name.last_known_name = n.user_name;
+                        point_name.time_watch_mins += 5;
+                        points_update.push(point_name);
                     } else {
-                        points_file.push({
+                        points_update.push({
                             structs_custom::PointUserTwitchStruct {
-                                points: 1,
+                                points: 0,
                                 user_id: n.user_id,
-                                time_watch_mins: 5,
+                                time_watch_mins: 0,
                                 last_known_name: n.user_name,
+                                existe_db: false,
                             }
                         });
                     }
                 }
             }
         }
-        if changed {
-            file_controller::save_all_points_user(points_file);
-        }
-        //TODO Save new points
+        //println!("update:{points_file}");
+        file_controller::save_all_points_user(points_update).await;
         let chatters_string = serde_json::to_string(&chatters).ok().unwrap();
         std::env::set_var("old_chatters", chatters_string);
-
         sleep(Duration::from_mins(5)).await
     }
 }
 
 async fn get_chatters_list() -> Vec<structs_twitch_api::ChatterList> {
     let mut listado_chatters: Vec<structs_twitch_api::ChatterList> = Vec::new();
-    let listado_chatters_result: structs_twitch_api::ResponseChatters =
-        websocket_twitch::get_chatters_twitch()
-            .await
-            .json()
-            .await
-            .unwrap();
-    for c in listado_chatters_result.data {
+    /*let listado_chatters_result: structs_twitch_api::ResponseChatters =
+    websocket_twitch::get_chatters_twitch()
+        .await
+        .json()
+        .await
+        .unwrap();*/
+    let listado_chatters_result:String =
+    websocket_twitch::get_chatters_twitch().await.text().await.unwrap();
+    println!("{listado_chatters_result}");
+    let listado_chatters_json: structs_twitch_api::ResponseChatters = serde_json::from_str(&listado_chatters_result).unwrap();
+    for c in listado_chatters_json.data {
         listado_chatters.push(structs_twitch_api::ChatterList {
             user_id: c.user_id,
             user_login: c.user_login,

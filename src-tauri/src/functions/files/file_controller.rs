@@ -1,12 +1,20 @@
-use crate::structs_custom::{self, BotCommandContainer};
+use tauri::{self};
+
+use crate::structs_custom::{self, BotCommandContainer, PointUserTwitchStruct};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteQueryResult},
+    ConnectOptions, Connection, Row, SqlitePool,
+};
 use std::{
     fs::File,
     io::{Read, Write},
+    str::FromStr,
 };
 
 const TOKEN_PATH: &str = "token.json";
 const COMMANDS_PATH: &str = "commands.json";
 const POINTS_PATH: &str = "points.json";
+const DATABASE_PATH: &str = "database.db";
 
 fn save_file_if_exist(data_string: String, file_name: &str) {
     let path: String = get_file_path(file_name);
@@ -16,10 +24,24 @@ fn save_file_if_exist(data_string: String, file_name: &str) {
         file_writable.write_all(data_string.as_bytes()).ok();
     }
 }
+
+fn get_config_path(file_name: &str) -> String {
+    let app: tauri::Context = tauri::generate_context!();
+    let identifier: String = app.config().identifier.clone();
+    let mut base_dir_path: std::path::PathBuf = dirs::config_dir().unwrap();
+    base_dir_path.push(identifier);
+    let base_dir = base_dir_path.as_path().to_str().unwrap();
+    let path: String = format!("{base_dir}/{file_name}");
+    return path;
+}
+
 fn get_file_path(file_name: &str) -> String {
-    let path_to_user_data_tmp = std::env::var_os("HOME").unwrap();
-    let path_to_user_data = path_to_user_data_tmp.to_str().unwrap();
-    let path: String = format!("{path_to_user_data}/.local/share/com.tokudoku.cromox/{file_name}");
+    let app: tauri::Context = tauri::generate_context!();
+    let identifier: String = app.config().identifier.clone();
+    let mut base_dir_path: std::path::PathBuf = dirs::data_dir().unwrap();
+    base_dir_path.push(identifier);
+    let base_dir = base_dir_path.as_path().to_str().unwrap();
+    let path: String = format!("{base_dir}/{file_name}");
     return path;
 }
 
@@ -173,26 +195,73 @@ pub async fn delete_command(id: u16) -> Result<String, ()> {
     Ok(String::from("Ok"))
 }
 
-pub fn get_all_points_user() -> Option<Vec<structs_custom::PointUserTwitchStruct>> {
-    let file: Result<File, std::io::Error> = File::open(get_file_path(POINTS_PATH));
-    let return_data: Vec<structs_custom::PointUserTwitchStruct>;
-    if file.is_ok() {
-        let mut new_file: File = file.unwrap();
-        let mut contents: String = String::new();
-        let _readed: Result<usize, std::io::Error> = new_file.read_to_string(&mut contents);
-        let data_new_env: Result<Vec<structs_custom::PointUserTwitchStruct>, serde_json::Error> =
-            serde_json::from_str(contents.as_str());
-        if data_new_env.is_ok() {
-            return_data = data_new_env.unwrap();
-            return Some(return_data);
+pub async fn get_all_points_user() -> Result<Vec<PointUserTwitchStruct>, ()> {
+    let con_options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", get_config_path(DATABASE_PATH)))
+            .unwrap();
+    let con: SqlitePool = SqlitePool::connect_with(con_options).await.unwrap();
+    let mut return_data: Vec<PointUserTwitchStruct> = vec![];
+
+    let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+        sqlx::query("SELECT * FROM users_twitch")
+            .fetch_all(&con)
+            .await;
+    if result.is_ok() {
+        let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+        for i in result_query {
+            return_data.push(structs_custom::PointUserTwitchStruct {
+                points: i.get("points"),
+                user_id: i.get("id"),
+                time_watch_mins: i.get("time_watch_mins"),
+                last_known_name: i.get("name"),
+                existe_db: true,
+            });
         }
     }
-    return Default::default();
+    con.close().await;
+    Ok(return_data)
 }
 
-pub fn save_all_points_user(points_file_data: Vec<structs_custom::PointUserTwitchStruct>) {
-    let data_string: String = serde_json::to_string(&points_file_data)
-        .ok()
-        .unwrap_or(String::from("{}"));
-    save_file_if_exist(data_string, POINTS_PATH);
+pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUserTwitchStruct>) {
+    let insert: Vec<_> = points_file_data
+        .iter()
+        .filter(|&x| x.existe_db == false)
+        .collect();
+    let update: Vec<_> = points_file_data
+        .iter()
+        .filter(|&x| x.existe_db == true)
+        .collect();
+    let con_options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", get_config_path(DATABASE_PATH)))
+            .unwrap();
+    let con: SqlitePool = SqlitePool::connect_with(con_options).await.unwrap();
+    println!("Guarda");
+    let data_string = serde_json::to_string(&points_file_data).unwrap();
+    println!("{data_string}");
+    for i in insert {
+        println!("intenta insertar");
+        let _result: SqliteQueryResult = sqlx::query(
+            "INSERT into users_twitch (id , name, points,time_watch_mins ) VALUES ($1,$2,$3,$4)",
+        )
+        .bind(i.user_id.clone())
+        .bind(i.last_known_name.clone())
+        .bind(i.points)
+        .bind(i.time_watch_mins)
+        .execute(&con)
+        .await
+        .unwrap();
+    }
+    for u in update {
+        println!("intenta actualizar");
+        let _result: SqliteQueryResult  = sqlx::query(
+            "UPDATE users_twitch SET   name = $2, points =$3,time_watch_mins =$4  WHERE id = $1",
+        )
+        .bind(u.user_id.clone())
+        .bind(u.last_known_name.clone())
+        .bind(u.points)
+        .bind(u.time_watch_mins)
+        .execute(&con)
+        .await.unwrap();
+    }
+    con.close().await;
 }
