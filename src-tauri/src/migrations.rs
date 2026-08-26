@@ -14,6 +14,12 @@ pub fn get_migrations() -> Vec<Migration>{
             description: "create_table_commands",
             sql:"CREATE TABLE commands_twitch ( id INTEGER, command_name TEXT NOT NULL UNIQUE, trigger TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL, response_text TEXT, sound TEXT, permits TEXT, cooldown TEXT, integration TEXT, point_cost INTEGER, enabled INTEGER DEFAULT 1, PRIMARY KEY(id AUTOINCREMENT));",
             kind: MigrationKind::Up
+        },
+        Migration {
+            version: 3, 
+            description: "create_table_tokens",
+            sql:"CREATE TABLE tokens_bot ( client_id TEXT, client_secret TEXT, redirect_uri TEXT, token TEXT, boradcaster_id TEXT, bot_id TEXT);",
+            kind: MigrationKind::Up
         }
     ];   
     return migrations;

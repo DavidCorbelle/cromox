@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 // Made by David Corbelle García
 use reqwest::{self, Error, Response};
+use tauri::AppHandle;
 use std::env;
 
 #[path = "functions/commandsTwitch/command_twitch.rs"]
@@ -73,8 +74,10 @@ async fn delete_command(command_id: u16) -> Result<String, ()> {
 }
 
 #[tauri::command]
-async fn start_data_config() -> Result<String, ()> {
-    let _res: String = file_controller::load_config_token().await.unwrap();
+async fn start_data_config(app: AppHandle) -> Result<String, ()> {
+    let _res: String = file_controller::load_config_token()
+        .await
+        .unwrap_or(String::from("Error"));
     let data_config: String = std::env::var("configLoaded")
         .ok()
         .unwrap_or(String::from("Error"));
@@ -83,11 +86,16 @@ async fn start_data_config() -> Result<String, ()> {
         let data_test: String = std::env::var("tokenBot").unwrap_or(String::from(""));
         if data_test != "" {
             response = String::from("LOADED");
+            let points_started: String = std::env::var("points_started")
+                .ok()
+                .unwrap_or(String::from("Error"));
+            if points_started != "S" {
+                tokio::spawn(command_twitch::twitch_points(app));
+            }
         } else {
             response = String::from("NODATA");
         }
     } else {
-        let _res_retry: String = file_controller::save_config().await.unwrap();
         response = String::from("NOTLOADED");
     }
 
@@ -100,7 +108,7 @@ async fn get_data_commands() -> Result<String, ()> {
 }
 
 #[tauri::command]
-async fn save_new_data_token(new_config_token: String) -> Result<String, ()> {
+async fn save_new_data_token(new_config_token: String, app: AppHandle) -> Result<String, ()> {
     let _res_save = file_controller::create_config_token(new_config_token).await;
     let _res = file_controller::load_config_token().await;
     let data_config: String = std::env::var("configLoaded")
@@ -111,6 +119,12 @@ async fn save_new_data_token(new_config_token: String) -> Result<String, ()> {
         let data_test: String = std::env::var("tokenBot").unwrap_or(String::from(""));
         if data_test != "" {
             response = String::from("LOADED");
+            let points_started: String = std::env::var("points_started")
+                .ok()
+                .unwrap_or(String::from("Error"));
+            if points_started != "S" {
+                tokio::spawn(command_twitch::twitch_points(app));
+            }
         } else {
             response = String::from("NODATA");
         }
@@ -122,11 +136,10 @@ async fn save_new_data_token(new_config_token: String) -> Result<String, ()> {
 }
 
 #[tauri::command]
-async fn implement_suscribers(sessionId: &str) -> Result<String, String> {
+async fn implement_suscribers(session_id: &str) -> Result<String, String> {
     let response: Result<Response, Error> =
-        websocket_twitch::implement_suscribers2(sessionId).await;
+        websocket_twitch::implement_suscribers2(session_id).await;
     let response_processed: String = response.ok().unwrap().text().await.ok().unwrap();
-    tokio::spawn(command_twitch::twitch_points());
     Ok(format!(
         "Hello, {}! You've been greeted from Rust2222222!",
         response_processed

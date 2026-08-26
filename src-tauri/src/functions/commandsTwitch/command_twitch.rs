@@ -1,32 +1,30 @@
-use crate::file_controller;
+use crate::file_controller::{self, get_command_by_trigger};
 use crate::structs_custom::{self, CommandStruct, PointUserTwitchStruct};
 use crate::structs_twitch_api::{self};
 use crate::websocket_twitch;
 use std::fs::File;
 use std::io::BufReader;
+use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
 
 pub async fn execute_command(message_text_command: &str) -> Result<String, String> {
-    let comands_list: Vec<CommandStruct> =
-        file_controller::get_commands().await.unwrap_or(vec![]);
     let message_split: Vec<&str> = message_text_command.split(' ').collect();
     let command_trigger: String = message_split[0].replace("!", "");
-    let index: usize = comands_list
-        .iter()
-        .position(|r: &structs_custom::CommandStruct| r.trigger == command_trigger)
-        .unwrap();
-    let command: structs_custom::CommandStruct = comands_list[index].clone();
-    if command.response_text != String::from("") {
-        let _res: Result<reqwest::Response, reqwest::Error> =
-            websocket_twitch::send_message_twitch(&command.response_text).await;
+    let command: CommandStruct = get_command_by_trigger(command_trigger)
+        .await
+        .unwrap_or(CommandStruct::default());
+    if command != CommandStruct::default() {
+        if command.response_text != String::from("") {
+            let _res: Result<reqwest::Response, reqwest::Error> =
+                websocket_twitch::send_message_twitch(&command.response_text).await;
+        }
+        if command.sound != Default::default() && command.sound.sound_dir != String::from("") {
+            tokio::spawn(reproduce_sound(
+                command.sound.sound_dir,
+                command.sound.sound_volume,
+            ));
+        }
     }
-    if command.sound != Default::default() && command.sound.sound_dir != String::from("") {
-        tokio::spawn(reproduce_sound(
-            command.sound.sound_dir,
-            command.sound.sound_volume,
-        ));
-    }
-
     Ok(String::from("OK"))
 }
 
@@ -42,7 +40,8 @@ async fn reproduce_sound(sound_dir: String, sound_volume: u8) -> Result<String, 
     Ok(String::from("Sound ended"))
 }
 
-pub async fn twitch_points() {
+pub async fn twitch_points(app:AppHandle) {
+    std::env::set_var("points_started", String::from("S"));
     loop {
         let points_file: Vec<structs_custom::PointUserTwitchStruct> =
             file_controller::get_all_points_user().await.unwrap();
@@ -88,23 +87,23 @@ pub async fn twitch_points() {
         //println!("update:{points_file}");
         file_controller::save_all_points_user(points_update).await;
         let chatters_string = serde_json::to_string(&chatters).ok().unwrap();
+        let _emit = app.emit("refresh-viewers", chatters_string.clone());
         std::env::set_var("old_chatters", chatters_string);
-        sleep(Duration::from_mins(5)).await
+        
+        sleep(Duration::from_secs(5)).await
     }
 }
 
 async fn get_chatters_list() -> Vec<structs_twitch_api::ChatterList> {
     let mut listado_chatters: Vec<structs_twitch_api::ChatterList> = Vec::new();
-    /*let listado_chatters_result: structs_twitch_api::ResponseChatters =
-    websocket_twitch::get_chatters_twitch()
+    let listado_chatters_result: String = websocket_twitch::get_chatters_twitch()
         .await
-        .json()
+        .text()
         .await
-        .unwrap();*/
-    let listado_chatters_result:String =
-    websocket_twitch::get_chatters_twitch().await.text().await.unwrap();
+        .unwrap();
     println!("{listado_chatters_result}");
-    let listado_chatters_json: structs_twitch_api::ResponseChatters = serde_json::from_str(&listado_chatters_result).unwrap();
+    let listado_chatters_json: structs_twitch_api::ResponseChatters =
+        serde_json::from_str(&listado_chatters_result).unwrap();
     for c in listado_chatters_json.data {
         listado_chatters.push(structs_twitch_api::ChatterList {
             user_id: c.user_id,

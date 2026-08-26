@@ -36,7 +36,7 @@ pub struct BodyRequestSendMessageTwitch {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
 pub struct CommandStruct {
     pub command_id: u16,
     pub command_name: String,
@@ -47,7 +47,7 @@ pub struct CommandStruct {
     pub permits: CommandStructPerms,
     pub integration: Option<CommandStructIntegration>,
     pub cooldown: Option<CommandStructCooldown>,
-    pub point_cost: Option<u32>,
+    pub point_cost: u32,
     pub enabled: bool,
 }
 #[derive(Serialize, Clone, Deserialize, PartialEq)]
@@ -56,13 +56,13 @@ pub struct CommandStructContentPositionData {
     pub param_name: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
 pub struct CommandStructContent {
     pub content_type: String,
     pub position_data: Option<Vec<CommandStructContentPositionData>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
 pub struct CommandStructPerms {
     pub content_type: String,
     pub rol_permit: Option<Vec<String>>,
