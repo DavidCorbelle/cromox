@@ -7,6 +7,7 @@ import ChatBox from "./components/chat/ChatBox";
 import TokenTwitchConfig from "./components/configMenu/TokenTwitchConfig";
 import CommandList from "./components/configMenu/CommandList";
 import { canIUseCommand } from "./functions/function_commands";
+import { listen } from '@tauri-apps/api/event';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let intentos = 0;
@@ -41,8 +42,16 @@ function App() {
   const commandUses = useRef<Array<CommandUses>>([]);
   const sessionIDtmp = useRef(undefined)
   const botIdChat = useRef("")
+  const viewers = useRef<Array<PayloadViewers>>([])
 
 
+  listen<string>('refresh-viewers', (event) => {
+    let viewers_parse = JSON.parse(event.payload);
+    viewers.current = viewers_parse;
+    console.log(viewers.current);
+    setForceUpdate(!forceUpdate);
+
+  });
 
   useEffect(() => {
     getDataLoaded();
@@ -124,7 +133,7 @@ function App() {
       //TEST if command used  
       let usable = canIUseCommand(command.command_id, i.chatter_user_id, command.cooldown, commandUses.current);
       if (usable) {
-        commandUses.current.push({commandIdUsed: command.command_id, lastTimeUsed: new Date(), userId: i.chatter_user_id});
+        commandUses.current.push({ commandIdUsed: command.command_id, lastTimeUsed: new Date(), userId: i.chatter_user_id });
         invoke('execute_command', { messageTextCommand });
 
       }
@@ -210,7 +219,7 @@ function App() {
       },
       integration: null,
       cooldown: {
-        units: isNaN(Number.parseInt(data.get("cooldown") as string)) ? 0:  (Number.parseInt(data.get("cooldown") as string))  ,
+        units: isNaN(Number.parseInt(data.get("cooldown") as string)) ? 0 : (Number.parseInt(data.get("cooldown") as string)),
         type_unit: "SECONDS"
       },
       point_cost: Number.parseInt(data.get("point_cost") as string),
@@ -312,6 +321,7 @@ function App() {
       <div hidden={currentMenu != MENU_ACTUAL.CHAT}>
         <ChatBox
           messageChatBox={messageChatBox}
+          viewers={viewers.current}
           send_message_twitch={send_message_twitch}
           setMessageChatBoxIntermedio={setMessageChatBoxIntermedio}
         >

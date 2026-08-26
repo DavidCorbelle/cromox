@@ -3,6 +3,7 @@ type ChatBoxComponent = {
     messageChatBox:string,
     send_message_twitch:Function,
     setMessageChatBoxIntermedio:Function
+    viewers:Array<PayloadViewers>
 }
 
 type TokenTwitchConfigComponent = {

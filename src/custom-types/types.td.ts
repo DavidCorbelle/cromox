@@ -96,3 +96,11 @@ type CommandUses = {
     lastTimeUsed: Date,
     commandIdUsed: Number
 }
+
+
+
+type PayloadViewers = {
+    user_id: String,
+    user_login: String,
+    user_name: String,
+}
