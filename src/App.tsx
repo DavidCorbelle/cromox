@@ -95,7 +95,7 @@ function App() {
     let dataCommandsString = await invoke("get_data_commands")
     if (dataCommandsString != "") {
       let dataCommands = JSON.parse(dataCommandsString as string);
-      let dataUpdate = dataCommands.commands;
+      let dataUpdate = dataCommands;
       commands.current = dataUpdate;
       setForceUpdate(!forceUpdate);
     }

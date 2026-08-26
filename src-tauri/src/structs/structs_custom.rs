@@ -36,12 +36,6 @@ pub struct BodyRequestSendMessageTwitch {
     pub message: String,
 }
 
-// Comandos
-#[derive(Serialize, Deserialize, Clone, Default, PartialEq)]
-pub struct BotCommandContainer {
-    pub commands: Vec<CommandStruct>,
-}
-
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct CommandStruct {
     pub command_id: u16,

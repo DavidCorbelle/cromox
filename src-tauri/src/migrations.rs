@@ -8,6 +8,12 @@ pub fn get_migrations() -> Vec<Migration>{
             description: "create_initial_tables",
             sql: "CREATE TABLE users_twitch (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), points BIGINT, time_watch_mins BIGINT);",
             kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2, 
+            description: "create_table_commands",
+            sql:"CREATE TABLE commands_twitch ( id INTEGER, command_name TEXT NOT NULL UNIQUE, trigger TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL, response_text TEXT, sound TEXT, permits TEXT, cooldown TEXT, integration TEXT, point_cost INTEGER, enabled INTEGER DEFAULT 1, PRIMARY KEY(id AUTOINCREMENT));",
+            kind: MigrationKind::Up
         }
     ];   
     return migrations;

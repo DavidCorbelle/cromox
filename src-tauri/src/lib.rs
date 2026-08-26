@@ -7,25 +7,25 @@ use std::env;
 mod command_twitch;
 #[path = "functions/files/file_controller.rs"]
 mod file_controller;
+#[path = "migrations.rs"]
+mod migrations_db;
 #[path = "structs/structs_custom.rs"]
 mod structs_custom;
 #[path = "structs/structs_twitch_api.rs"]
 mod structs_twitch_api;
 #[path = "functions/websocket/websocketTwitch.rs"]
 mod websocket_twitch;
-#[path = "migrations.rs"]
-mod migrations_db;
 
 #[tauri::command]
 fn get_bot_id() -> String {
     return std::env::var("bot_id").ok().unwrap_or(String::from(""));
 }
 
-
 #[tauri::command]
 async fn send_message_twitch(message: &str) -> Result<String, ()> {
     let response: Result<Response, reqwest::Error> =
         websocket_twitch::send_message_twitch(message).await;
+
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Mensaje enviado con exito");
@@ -145,10 +145,14 @@ async fn execute_command(message_text_command: &str) -> Result<String, ()> {
 pub fn run() {
     env::set_var("RUST_BACKTRACE", "1");
 
-    let migrations: Vec<tauri_plugin_sql::Migration> =  migrations_db::get_migrations();
+    let migrations: Vec<tauri_plugin_sql::Migration> = migrations_db::get_migrations();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_sql::Builder::new().add_migrations("sqlite:database.db", migrations).build())
+        .plugin(
+            tauri_plugin_sql::Builder::new()
+                .add_migrations("sqlite:database.db", migrations)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
