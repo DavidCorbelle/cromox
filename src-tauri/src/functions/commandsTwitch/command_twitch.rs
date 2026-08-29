@@ -90,7 +90,7 @@ pub async fn twitch_points(app:AppHandle) {
         let _emit = app.emit("refresh-viewers", chatters_string.clone());
         std::env::set_var("old_chatters", chatters_string);
         
-        sleep(Duration::from_secs(5)).await
+        sleep(Duration::from_mins(5)).await
     }
 }
 

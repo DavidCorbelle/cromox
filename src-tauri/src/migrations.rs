@@ -18,7 +18,7 @@ pub fn get_migrations() -> Vec<Migration>{
         Migration {
             version: 3, 
             description: "create_table_tokens",
-            sql:"CREATE TABLE tokens_bot ( client_id TEXT, client_secret TEXT, redirect_uri TEXT, token TEXT, boradcaster_id TEXT, bot_id TEXT);",
+            sql:"CREATE TABLE tokens_bot ( type_token TEXT, refresh_token TEXT, expires_in NUMERIC, expire_date TEXT, user_id TEXT) ;",
             kind: MigrationKind::Up
         }
     ];   

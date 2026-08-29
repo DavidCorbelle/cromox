@@ -25,7 +25,7 @@ pub struct JSONConfig {
     pub client_secret: String,
     pub redirect_uri: String,
     pub token: String,
-    pub boradcaster_id: String,
+    pub broadcaster_id: String,
     pub bot_id: String,
 }
 

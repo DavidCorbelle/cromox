@@ -1,10 +1,20 @@
-use crate::structs_custom::{self, CommandStruct, JSONConfig, PointUserTwitchStruct};
+use crate::{
+    consts,
+    secret_const::{self, BOT_TOKEN_TYPE, CLIENT_ID, CLIENT_SECRET, STREAMER_TOKEN_TYPE},
+    structs_custom::{self, CommandStruct, JSONConfig, PointUserTwitchStruct},
+    structs_twitch_api, websocket_twitch,
+};
+use reqwest::{header::CONTENT_TYPE, Client, Response, StatusCode};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteQueryResult},
     Row, SqlitePool,
 };
-use std::str::FromStr;
-use tauri::{self};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
+use tauri::{self, AppHandle, Emitter};
 
 const DATABASE_PATH: &str = "database.db";
 
@@ -28,7 +38,7 @@ fn get_config_path(file_name: &str) -> String {
 
 fn config_struct() -> structs_custom::JSONConfig {
     let data_struct: structs_custom::JSONConfig = structs_custom::JSONConfig {
-        boradcaster_id: std::env::var("boradcaster_id")
+        broadcaster_id: std::env::var("broadcaster_id")
             .ok()
             .unwrap_or(String::from("")),
         bot_id: std::env::var("bot_id").ok().unwrap_or(String::from("")),
@@ -44,26 +54,6 @@ fn config_struct() -> structs_custom::JSONConfig {
     return data_struct;
 }
 
-pub async fn create_config_token(data_new_env: String) -> Result<String, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
-    let _delete: Result<SqliteQueryResult, sqlx::Error> =
-        sqlx::query("DELETE FROM tokens_bot").execute(&con).await;
-    let token_data: JSONConfig = serde_json::from_str(&data_new_env).unwrap();
-    let _result: SqliteQueryResult = sqlx::query(
-        "INSERT into tokens_bot (client_id, client_secret, redirect_uri, token, boradcaster_id, bot_id ) VALUES ($1,$2,$3,$4,$5,$6)",
-    )
-    .bind(token_data.client_id)
-    .bind(token_data.client_secret)
-    .bind(token_data.redirect_uri)
-    .bind(token_data.token)
-    .bind(token_data.boradcaster_id)
-    .bind(token_data.bot_id)
-    .execute(&con)
-    .await
-    .unwrap();
-    Ok(String::from(data_new_env))
-}
-
 pub async fn load_config_token() -> Result<String, String> {
     let con: SqlitePool = get_connection().await.unwrap();
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
@@ -72,32 +62,29 @@ pub async fn load_config_token() -> Result<String, String> {
             .await;
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
-        if result_query.len() > 0 {
-            let i = result_query.get(0).unwrap();
-            let boradcaster_id: &str = i.get("boradcaster_id");
-            std::env::set_var("boradcaster_id", boradcaster_id);
-            let bot_id: &str = i.get("bot_id");
-            std::env::set_var("bot_id", bot_id);
-            let client_id: &str = i.get("client_id");
-            std::env::set_var("client_id", client_id);
-            let client_secret: &str = i.get("client_secret");
-            std::env::set_var("client_secret", client_secret);
-            let redirect_uri: &str = i.get("redirect_uri");
-            std::env::set_var("redirect_uri", redirect_uri);
-            let token: &str = i.get("token");
-            std::env::set_var("tokenBot", token);
-            std::env::set_var("configLoaded", "S");
-            con.close().await;
-            Ok(String::from("Configuracion Cargada"))
-        } else {
-            std::env::set_var("configLoaded", "N");
-            con.close().await;
-            Err(String::from("No se ha encontrado el comando"))
+        for i in result_query {
+            let type_token: String = i.get("type_token");
+            if type_token == STREAMER_TOKEN_TYPE {
+                println!("Inicialciza Streamer");
+                let broadcaster_id: &str = i.get("user_id");
+                println!("{broadcaster_id}");
+                std::env::set_var("broadcaster_id", broadcaster_id);
+            } else if type_token == BOT_TOKEN_TYPE {
+                 println!("Inicialciza Bot");
+                let bot_id: &str = i.get("user_id");
+                std::env::set_var("bot_id", bot_id);
+                let refresh_token: &str = i.get("refresh_token");
+                let token = get_access_token(refresh_token).await.unwrap();
+                std::env::set_var("tokenBot", token);
+                std::env::set_var("configLoaded", "S");
+            }
         }
+        con.close().await;
+        Ok(String::from("Configuracion Cargada"))
     } else {
         std::env::set_var("configLoaded", "N");
         con.close().await;
-        Err(String::from("No se ha encontrado el comando"))
+        Err(String::from("No se podido cargar la configuracion"))
     }
 }
 
@@ -106,7 +93,7 @@ pub async fn save_config() -> Result<String, ()> {
     let data_string: String = serde_json::to_string(&data_new_env)
         .ok()
         .unwrap_or(String::from("{}"));
-    let _res = create_config_token(data_string).await;
+    
     Ok(String::from("Config saved"))
 }
 
@@ -290,7 +277,7 @@ pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUse
     for i in insert {
         println!("intenta insertar");
         let _result: SqliteQueryResult = sqlx::query(
-            "INSERT into users_twitch (id , name, points,time_watch_mins ) VALUES ($1,$2,$3,$4)",
+            "INSERT INTO users_twitch (id , name, points,time_watch_mins ) VALUES ($1,$2,$3,$4)",
         )
         .bind(i.user_id.clone())
         .bind(i.last_known_name.clone())
@@ -314,4 +301,103 @@ pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUse
         .unwrap();
     }
     con.close().await;
+}
+
+pub async fn check_tokens(app: AppHandle) {
+    let token_bot = std::env::var("tokenBot").ok().unwrap_or(String::from(""));
+    let token_streamer = std::env::var("tokenBot").ok().unwrap_or(String::from(""));
+    let broadcaster_id = std::env::var("broadcaster_id")
+        .ok()
+        .unwrap_or(String::from(""));
+    let bot_id = std::env::var("bot_id").ok().unwrap_or(String::from(""));
+    if broadcaster_id == "" || token_streamer == "" {
+        println!("broadcaster_id: {broadcaster_id} && token_streamer {token_streamer}");
+        let _res1 = app.emit("token-invalid", STREAMER_TOKEN_TYPE);
+    } else {
+        let _resu1 = app.emit("token-updated", STREAMER_TOKEN_TYPE);
+    }
+    if bot_id == "" || token_bot == "" {
+        let _res2 = app.emit("token-invalid", BOT_TOKEN_TYPE);
+    } else {
+        let _resu2 = app.emit("token-updated", BOT_TOKEN_TYPE);
+    }
+}
+
+pub async fn save_token_auth(token: &str, type_token: &str) -> Result<String, String> {
+    //GET NEW ACCESS TOKEN
+    let url_get_token = secret_const::get_refresh_token_url(token.to_string());
+    let client: Client = reqwest::Client::new();
+    let response: Result<Response, reqwest::Error> = client.post(url_get_token).send().await;
+    if response.is_ok() {
+        let response_data = response.unwrap();
+        let response_string = response_data.text().await.unwrap();
+        let response_object: structs_twitch_api::AccessTokenResponseTwitch =
+            serde_json::from_str(&response_string).unwrap();
+        if type_token == BOT_TOKEN_TYPE {
+            std::env::set_var("tokenBot", response_object.access_token);
+        } else if type_token == STREAMER_TOKEN_TYPE {
+            std::env::set_var("tokenStreamer", response_object.access_token);
+        }
+        let user: String = websocket_twitch::get_id_user_twitch(type_token)
+            .await
+            .unwrap();
+        let con: SqlitePool = get_connection().await.unwrap();
+        let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+            sqlx::query("SELECT * FROM tokens_bot WHERE type_token = $1")
+                .bind(type_token)
+                .fetch_all(&con)
+                .await;
+        if result.is_ok() {
+            let expire_date: SystemTime = SystemTime::now();
+            let duration_expire = Duration::from_secs(response_object.expires_in as u64);
+            expire_date.checked_add(duration_expire);
+            let expire_date_unix_epoch =
+                expire_date.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+            let expire_date_unix = expire_date_unix_epoch.as_secs().to_string();
+            let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+            if result_query.len() > 0 {
+                println!("intenta actualizar");
+                println!("{}", type_token);
+                let _result_u: SqliteQueryResult = sqlx::query("UPDATE tokens_bot SET refresh_token = $2, expires_in = $3, expire_date = $4, user_id = $5 WHERE type_token = $1")
+                    .bind(type_token)
+        .bind(response_object.refresh_token)
+        .bind(response_object.expires_in)
+        .bind(expire_date_unix)
+        .bind(user)
+        .execute(&con)
+        .await
+        .unwrap();
+            } else {
+                println!("intenta insertar");
+                let _result_u: SqliteQueryResult = sqlx::query("INSERT INTO tokens_bot (type_token,refresh_token, expires_in, expire_date, user_id) VALUES ($1,$2,$3,$4,$5)")
+                    .bind(type_token)
+        .bind(response_object.refresh_token)
+        .bind(response_object.expires_in)
+        .bind(expire_date_unix)
+        .bind(user)
+        .execute(&con)
+        .await
+        .unwrap();
+            }
+        }
+    }
+
+    Ok(String::from("Token Updated"))
+}
+
+async fn get_access_token(refresh_token: &str) -> Result<String, ()> {
+    let url: String = consts::get_access_token_url();
+    let client = reqwest::Client::new();
+    let mut params = HashMap::new();
+    params.insert("client_id", CLIENT_ID);
+    params.insert("client_secret", CLIENT_SECRET);
+    params.insert("grant_type", "refresh_token");
+    params.insert("refresh_token", refresh_token);
+    let response: Result<Response, reqwest::Error> = client.post(url).form(&params).send().await;
+    let response_data: Response = response.unwrap();
+    let response_string: String = response_data.text().await.unwrap();
+    println!("{response_string}");
+    let response_object: structs_twitch_api::AccessTokenResponseTwitch =
+        serde_json::from_str(&response_string).unwrap();
+    Ok(response_object.access_token)
 }
