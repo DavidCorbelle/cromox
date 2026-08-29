@@ -28,3 +28,16 @@ export const TIPO_COMANDO_TEXTO ={
 export const COOLDOWN_MULT = {
     "SECONDS": 1000
 }
+
+
+export const TYPE_TOKEN = {
+    STREAMER:"STREAMER",
+    BOT:"BOT"
+}
+
+export const PERMIT_TWITCH = {
+    MODERATOR:"moderator",
+    SUSCRIBER:"subscriber",
+    BROADCASTER:"broadcaster"
+}
+

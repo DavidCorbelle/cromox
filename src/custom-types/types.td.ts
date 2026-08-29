@@ -1,4 +1,4 @@
-type ChatMessage = {
+export type ChatMessage = {
     message: string,
     chatter_name: string
 }
@@ -24,7 +24,7 @@ type messageEventBadges = {
 
 }
 
-type messageEvent = {
+export type messageEvent = {
     "broadcaster_user_id": string,
     "broadcaster_user_login": string,
     "broadcaster_user_name": string,
@@ -48,7 +48,7 @@ type messageEvent = {
     "channel_points_animation_id": any
 }
 
-type Command  = {
+export type Command  = {
      command_id: Number,
       command_name: string,
       trigger: string,
@@ -62,26 +62,32 @@ type Command  = {
       enabled: boolean
 }
 
-type CommandStructPermitType = {
+export type CommandStructPermitType = {
         content_type: string,
         rol_permit: Array<string>|null,
         user_permit: Array<string>|null
 }
-type CommandStrucIntegrationType = {
+export type CommandStrucIntegrationType = {
         http_endpoint: string,
         use_integration: string|null,
         data_integration: null
 }
-type CommandStrucCooldownType = {
+export type CommandStrucCooldownType = {
        units: number,
-       type_unit: "SECONDS"
+       type_unit: "SECONDS",
+       type_cooldown:COOLDOWN_TYPE;
 }
 
-type CommandStructContent= {
+export enum COOLDOWN_TYPE {
+    GENERAL="GENERAL",
+    USER="USER"
+}
+
+export type CommandStructContent= {
     content_type: String,
     position_data: Array<CommandStructContentPositionData> | null,
 }
-type CommandStructContentPositionData = {
+ export type CommandStructContentPositionData = {
     position: String,
     param_name: String
 }
@@ -91,7 +97,7 @@ type CommandStructSoundData = {
     sound_volume: Number
 }
 
-type CommandUses = {
+export type CommandUses = {
     userId: String,
     lastTimeUsed: Date,
     commandIdUsed: Number
@@ -99,7 +105,7 @@ type CommandUses = {
 
 
 
-type PayloadViewers = {
+export type PayloadViewers = {
     user_id: String,
     user_login: String,
     user_name: String,

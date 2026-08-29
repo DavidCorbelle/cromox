@@ -2,42 +2,38 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import { useRef } from "react";
-import { MENU_ACTUAL, MENU_COMANDOS, message_types, suscription_types, TIPO_COMANDO_TEXTO } from "./consts";
+import { MENU_ACTUAL, message_types, suscription_types, TIPO_COMANDO_TEXTO, TYPE_TOKEN } from "./consts";
 import ChatBox from "./components/chat/ChatBox";
 import TokenTwitchConfig from "./components/configMenu/TokenTwitchConfig";
 import CommandList from "./components/configMenu/CommandList";
 import { canIUseCommand } from "./functions/function_commands";
 import { listen } from '@tauri-apps/api/event';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { ChatMessage, Command, CommandUses, COOLDOWN_TYPE, messageEvent, PayloadViewers } from "./custom-types/types.td";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let intentos = 0;
+let didInit = false;
+let socketStarted = false;
+
 const initializeSocket = () => {
   try {
     return new WebSocket("wss://eventsub.wss.twitch.tv/ws")
   } catch {
-    if (intentos < 10) {
-      console.log("reintento");
-      sleep(2000);
-      intentos++;
-      return initializeSocket()
-    } else {
-      throw new Error("No se ha podido inicializar el socket");
-    }
+    throw new Error("No se ha podido inicializar el socket");
   }
 
 }
 
 function App() {
-  const [socket, setSocket] = useState(initializeSocket)
-  const [greetMsg, setGreetMsg] = useState("");
+  const [socket] = useState(initializeSocket)
+  const [greetMsg] = useState("");
   const [messageChatBox, setMessageChatBox] = useState("");
-  const [sessionID, setSessionID] = useState(undefined);
+  const [broadcasterTokenLoaded, setBroadcasterTokenLoaded] = useState(false);
+  const [botTokenLoaded, setBotTokenLoaded] = useState(false);
+  const [suscribersStarted, setSuscribersStarted] = useState(false);
   const [dataLoaded, setDataLoaded] = useState<any>(undefined);
   const [currentMenu, setCurrentMenu] = useState(MENU_ACTUAL.CHAT);
-  const [statusSubMenu, setStatusSubMenu] = useState(0);
   const [messages, setMessages] = useState<Array<ChatMessage>>([]);
   const commands = useRef<Array<Command>>([])
-  const [currentCommand, setCurrentCommand] = useState<undefined | Command>(undefined);
   const [forceUpdate, setForceUpdate] = useState<boolean>(true);
   const commandUses = useRef<Array<CommandUses>>([]);
   const sessionIDtmp = useRef(undefined)
@@ -48,44 +44,72 @@ function App() {
   listen<string>('refresh-viewers', (event) => {
     let viewers_parse = JSON.parse(event.payload);
     viewers.current = viewers_parse;
-    console.log(viewers.current);
     setForceUpdate(!forceUpdate);
 
   });
+  listen<string>('token-invalid', (event) => {
+    if (event.payload == TYPE_TOKEN.BOT) {
+      setBotTokenLoaded(false);
+    } else if (event.payload == TYPE_TOKEN.STREAMER) {
+      setBroadcasterTokenLoaded(false);
+    }
+  });
+  listen<string>('token-updated', (event) => {
+    if (event.payload == TYPE_TOKEN.BOT) {
+      setBotTokenLoaded(true);
+    } else if (event.payload == TYPE_TOKEN.STREAMER) {
+      setBroadcasterTokenLoaded(true);
+    }
+  });
 
   useEffect(() => {
-    getDataLoaded();
+    if (didInit == false) {
+      didInit = true
+      getDataLoaded();
+    }
+
   }, []);
 
   useEffect(() => {
-    if (dataLoaded != undefined) {
+    if (botTokenLoaded == true && broadcasterTokenLoaded == true && suscribersStarted == false && sessionIDtmp.current != undefined) {
+      tryStartSuscribers();
+
+    }
+  }, [botTokenLoaded, broadcasterTokenLoaded, sessionIDtmp]);
+
+  async function tryStartSuscribers() {
+    if (suscribersStarted == false) {
+      botIdChat.current = await invoke("get_bot_id");
+      let sessionId = sessionIDtmp.current;
+      let tryStart: string = await invoke("implement_suscribers", { sessionId });
+      if (!tryStart.includes("Error")) {
+        setSuscribersStarted(true);
+      }
+    }
+
+  }
+  useEffect(() => {
+    if (socket != undefined && socketStarted == false) {
+      socketStarted = true;
       // Connection opened
       socket.addEventListener("open", _event => {
-
       });
       // Listen for messages
       socket.addEventListener("message", (event) => process_message(event));
     }
 
-  }, [dataLoaded])
-  useEffect(() => {
-    if (sessionID != undefined) {
-      implement_suscribers(sessionID)
-    }
-
-  }, [sessionID]);
+  }, [socket])
 
   function process_message(event: MessageEvent<any>) {
     if (sessionIDtmp.current == undefined) {
       let session_id = JSON.parse(event.data).payload.session.id;
       sessionIDtmp.current = session_id;
-      setSessionID(session_id);
+
     } else {
       let data = JSON.parse(event.data);
       if (data.metadata.message_type == message_types.NOTIFICATION) {
         if (data.metadata.subscription_type == suscription_types.CHAT_MESSAGE) {
           let event: messageEvent = data.payload.event;
-          console.log(commands.current);
           if (event.message.text.startsWith("!") && event.chatter_user_id != botIdChat.current) {
             try_command(event);
           } else {
@@ -95,7 +119,7 @@ function App() {
         }
       }
 
-      setGreetMsg("Message from server " + event.data)
+      //setGreetMsg("Message from server " + event.data)
 
     }
 
@@ -130,9 +154,8 @@ function App() {
     let find = commands.current.filter((e) => { return (e.trigger == command_string) })
     if (find.length > 0) {
       let command = find[0];
-      //TEST if command used  
       let usable = canIUseCommand(command.command_id, i.chatter_user_id, command.cooldown, commandUses.current);
-      if (usable) {
+      if (usable && command.enabled == true) {
         commandUses.current.push({ commandIdUsed: command.command_id, lastTimeUsed: new Date(), userId: i.chatter_user_id });
         invoke('execute_command', { messageTextCommand });
 
@@ -142,11 +165,6 @@ function App() {
     add_message(i);
   }
 
-  async function implement_suscribers(sessionId: string) {
-    console.log(sessionID);
-    setGreetMsg(await invoke("implement_suscribers", { sessionId }));
-    botIdChat.current = await invoke("get_bot_id");
-  }
 
   async function getDataLoaded() {
     setDataLoaded(await invoke("start_data_config"));
@@ -163,42 +181,15 @@ function App() {
     setMessageChatBox(e.target.value)
   }
 
-  function setStatusSubMenuInter(e: number) {
-    setStatusSubMenu(e);
-  }
 
-  function save_token_twitch_config() {
-    var client_id_container = document.getElementById("client_id") as unknown;
-    var client_id = client_id_container as HTMLInputElement;
-    var client_secret_container = document.getElementById("client_secret") as unknown;
-    var client_secret = client_secret_container as HTMLInputElement;
-    var redirect_uri_container = document.getElementById("redirect_uri") as unknown;
-    var redirect_uri = redirect_uri_container as HTMLInputElement;
-    var token_container = document.getElementById("token") as unknown;
-    var token = token_container as HTMLInputElement;
-    var boradcaster_id_container = document.getElementById("boradcaster_id") as unknown;
-    var boradcaster_id = boradcaster_id_container as HTMLInputElement;
-    var bot_id_container = document.getElementById("bot_id") as unknown;
-    var bot_id = bot_id_container as HTMLInputElement;
-
-    var dataJSON = {
-      client_id: client_id.value,
-      client_secret: client_secret.value,
-      redirect_uri: redirect_uri.value,
-      token: token.value,
-      boradcaster_id: boradcaster_id.value,
-      bot_id: bot_id.value
-    };
-    var newConfigToken = JSON.stringify(dataJSON);
-
-    invoke("save_new_data_token", { newConfigToken }).then(() => setSocket(initializeSocket()));
+  function save_token_twitch_config(tokenType: string) {
+    invoke("get_url_token", { tokenType }).then((res) => { openUrl(res as string) });
   }
 
 
   function prepare_data_command(data: FormData): Command {
     let commands_data = commands.current;
     let command_id = (commands != undefined && commands_data.length > 0 ? commands_data[commands_data.length - 1].command_id as number + 1 : 1);
-    console.log("dataCooldown", (Number.parseInt(data.get("cooldown") as string)));
     let new_command: Command = {
       command_id: command_id,
       command_name: data.get("command_name") as string,
@@ -220,7 +211,8 @@ function App() {
       integration: null,
       cooldown: {
         units: isNaN(Number.parseInt(data.get("cooldown") as string)) ? 0 : (Number.parseInt(data.get("cooldown") as string)),
-        type_unit: "SECONDS"
+        type_unit: "SECONDS",
+        type_cooldown: data.get("type_cooldown") as COOLDOWN_TYPE
       },
       point_cost: Number.parseInt(data.get("point_cost") as string),
       enabled: data.get("enabled") != null
@@ -232,8 +224,6 @@ function App() {
   function create_comando(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     var formData = new FormData(e.target);
-    console.log(formData.get("enabled"));
-    console.log(commands);
     let new_command = prepare_data_command(formData);
     let tmpCommands: Array<Command>
     if (commands != undefined) {
@@ -247,7 +237,6 @@ function App() {
       update_commands();
     });
     commands.current = tmpCommands;
-    setStatusSubMenu(MENU_COMANDOS.BASE);
   }
 
   function delete_command(commandId: Number) {
@@ -259,9 +248,7 @@ function App() {
     e.preventDefault();
 
     var formData = new FormData(e.target);
-    console.log(formData.get("cooldown"));
     let new_command = prepare_data_command(formData);
-    console.log(new_command.cooldown?.units);
     new_command.command_id = commandId;
     let tmpCommands: Array<Command>
     if (commands != undefined) {
@@ -276,31 +263,24 @@ function App() {
     }
     let commandData = JSON.stringify(new_command);
     commands.current = tmpCommands;
-    setStatusSubMenu(MENU_COMANDOS.BASE);
     invoke('edit_command', { commandId, commandData }).then(() => { update_commands() })
-  }
-
-
-  function set_current_command(command: Command) {
-    setCurrentCommand(command);
   }
 
   function renderCurrentView() {
     switch (currentMenu) {
       case MENU_ACTUAL.TOKENS:
         return (<TokenTwitchConfig
-          save_token_twitch_config={save_token_twitch_config}
+          get_new_token_bot={save_token_twitch_config}
+          get_new_token_streamer={save_token_twitch_config}
+          bot_token_loaded={botTokenLoaded}
+          streamer_token_loaded={broadcasterTokenLoaded}
         ></TokenTwitchConfig>)
       case MENU_ACTUAL.COMANDOS:
         return (<CommandList
           commands={commands.current}
-          status_sub_menu={statusSubMenu}
-          set_status_sub_menu={setStatusSubMenuInter}
           create_comando={create_comando}
           delete_command={delete_command}
           edit_command={edit_command}
-          set_current_command={set_current_command}
-          current_command={currentCommand}
         ></CommandList>)
 
       default:
@@ -331,6 +311,7 @@ function App() {
       <div>
         {renderCurrentView()}
       </div>
+
 
     </main>
   );
