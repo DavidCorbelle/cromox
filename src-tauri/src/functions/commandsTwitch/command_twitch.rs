@@ -13,7 +13,7 @@ pub async fn execute_command(message_text_command: &str) -> Result<String, Strin
     let command: CommandStruct = get_command_by_trigger(command_trigger)
         .await
         .unwrap_or(CommandStruct::default());
-    if command != CommandStruct::default() {
+    if command != CommandStruct::default() && command.enabled == true {
         if command.response_text != String::from("") {
             let _res: Result<reqwest::Response, reqwest::Error> =
                 websocket_twitch::send_message_twitch(&command.response_text).await;
@@ -40,7 +40,7 @@ async fn reproduce_sound(sound_dir: String, sound_volume: u8) -> Result<String, 
     Ok(String::from("Sound ended"))
 }
 
-pub async fn twitch_points(app:AppHandle) {
+pub async fn twitch_points(app: AppHandle) {
     std::env::set_var("points_started", String::from("S"));
     loop {
         let points_file: Vec<structs_custom::PointUserTwitchStruct> =
@@ -84,12 +84,11 @@ pub async fn twitch_points(app:AppHandle) {
                 }
             }
         }
-        //println!("update:{points_file}");
         file_controller::save_all_points_user(points_update).await;
         let chatters_string = serde_json::to_string(&chatters).ok().unwrap();
         let _emit = app.emit("refresh-viewers", chatters_string.clone());
         std::env::set_var("old_chatters", chatters_string);
-        
+
         sleep(Duration::from_mins(5)).await
     }
 }
@@ -101,7 +100,6 @@ async fn get_chatters_list() -> Vec<structs_twitch_api::ChatterList> {
         .text()
         .await
         .unwrap();
-    println!("{listado_chatters_result}");
     let listado_chatters_json: structs_twitch_api::ResponseChatters =
         serde_json::from_str(&listado_chatters_result).unwrap();
     for c in listado_chatters_json.data {

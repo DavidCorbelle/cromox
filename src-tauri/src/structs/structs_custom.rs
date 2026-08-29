@@ -19,16 +19,6 @@ pub struct BodyRequestSuscriber {
     pub transport: TransportStruct,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JSONConfig {
-    pub client_id: String,
-    pub client_secret: String,
-    pub redirect_uri: String,
-    pub token: String,
-    pub broadcaster_id: String,
-    pub bot_id: String,
-}
-
 #[derive(Serialize)]
 pub struct BodyRequestSendMessageTwitch {
     pub broadcaster_id: String,
@@ -80,6 +70,7 @@ pub struct CommandStructIntegration {
 pub struct CommandStructCooldown {
     pub units: u16,
     pub type_unit: String,
+    pub type_cooldown: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Default)]

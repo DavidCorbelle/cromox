@@ -13,7 +13,6 @@ fn get_auth_headers(type_token: &str) -> HeaderMap {
     } else if type_token == BOT_TOKEN_TYPE {
         token = std::env::var("tokenBot").unwrap_or(String::from(""));
     }
-    println!("{token}");
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
     headers.insert("Client-Id", CLIENT_ID.parse().unwrap());
@@ -24,7 +23,6 @@ fn get_auth_headers(type_token: &str) -> HeaderMap {
     return headers;
 }
 pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwest::Error> {
-    println!("Implementa los suscriptores");
     let broadcaster_id: String = std::env::var("broadcaster_id").unwrap_or(String::from(""));
     let bot_id: String = std::env::var("bot_id").unwrap_or(String::from(""));
     const URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
@@ -52,8 +50,6 @@ pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwes
         .await?;
     
     let status = response.status();
-    let response_string = response.text().await.unwrap();
-    println!("Respuesta Implementar Suscriptores {response_string}");
     Ok(status)
 }
 

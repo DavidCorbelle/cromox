@@ -32,11 +32,9 @@ fn get_bot_id() -> String {
 async fn send_message_twitch(message: &str) -> Result<String, ()> {
     let response: Result<Response, reqwest::Error> =
         websocket_twitch::send_message_twitch(message).await;
-
     let response_string: String;
     if response.is_ok() {
         let response_string2 = response.unwrap().text().await.unwrap();
-        println!("{response_string2}");
         response_string = String::from("Mensaje enviado con exito");
     } else {
         response_string = String::from("Ha ocurrido un error");
@@ -151,10 +149,8 @@ async fn get_url_token(token_type: String, app: AppHandle) -> Result<String, ()>
 }
 
 async fn get_auth_token(token_type: String, app: AppHandle) {
-    println!("test");
     let listener = TcpListener::bind(("127.0.0.1", 8080));
     if listener.is_ok() {
-        println!("open port");
         let listener_tcp: TcpListener = listener.unwrap();
         for stream in listener_tcp.incoming() {
             let mut stream = stream.unwrap();
