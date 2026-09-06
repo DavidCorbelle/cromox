@@ -1,4 +1,4 @@
-use crate::file_controller::{self, get_command_by_trigger};
+use crate::file_controller::{self};
 use crate::structs_custom::{self, CommandStruct, PointUserTwitchStruct};
 use crate::structs_twitch_api::{self};
 use crate::websocket_twitch;
@@ -7,7 +7,7 @@ use std::io::BufReader;
 use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
 
-pub async fn execute_command(command:CommandStruct, message_string:&str) -> Result<String, String> {
+pub async fn execute_command(command:CommandStruct, _message_string:&str) -> Result<String, String> {
     if command != CommandStruct::default() && command.enabled == true {
         if command.response_text != String::from("") {
             let _res: Result<reqwest::Response, reqwest::Error> =

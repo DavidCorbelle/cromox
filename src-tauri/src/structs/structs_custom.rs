@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpStream;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 #[derive(Serialize)]
 pub struct ConditionStruct {

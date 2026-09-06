@@ -1,5 +1,4 @@
 use std::sync::Mutex;
-use serde::Deserialize;
 use tauri::{AppHandle, Manager};
 
 use crate::{structs_custom::AppRunnigConfig, structs_vtubestudio::*};

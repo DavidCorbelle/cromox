@@ -93,7 +93,7 @@ async fn start_data_config(app: AppHandle) -> Result<String, ()> {
     let paths = fs::read_dir("/dev/input/").unwrap();
     for path in paths {
         let path_check = path.unwrap();
-        let path_dir = path_check.file_name().display().to_string();
+        let _path_dir = path_check.file_name().display().to_string();
         if !path_check.file_type().unwrap().is_dir() {
             // tokio::spawn(start_check_hotkeys(path_dir));
         }
@@ -132,7 +132,7 @@ async fn get_data_commands() -> Result<String, ()> {
     Ok(res)
 }
 
-async fn start_check_hotkeys(path: String) {
+async fn _start_check_hotkeys(path: String) {
     let device_test = Device::open(format!("/dev/input/{}", path));
     if device_test.is_ok() {
         let mut device = device_test.unwrap();

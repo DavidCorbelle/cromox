@@ -1,3 +1,5 @@
+import { ChatBoxComponent } from "../../custom-types/components.td";
+
 const ChatBox = ({ send_message_twitch, messageChatBox, setMessageChatBoxIntermedio, viewers }: ChatBoxComponent) => {
 
     return (<div>
