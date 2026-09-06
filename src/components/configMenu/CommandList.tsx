@@ -2,7 +2,7 @@
 import { Key, useState } from "react";
 import { MENU_COMANDOS } from "../../consts";
 import { open } from '@tauri-apps/plugin-dialog';
-import { Command, COOLDOWN_TYPE } from "../../custom-types/types.td";
+import { Command, COOLDOWN_TYPE, PERMISION_ROLE_TYPE, PERMISSION_TYPE } from "../../custom-types/types.td";
 import { ComandListComponent } from "../../custom-types/components.td";
 
 const CommandList = ({ commands, create_comando, delete_command, edit_command }: ComandListComponent) => {
@@ -73,6 +73,9 @@ const CommandList = ({ commands, create_comando, delete_command, edit_command }:
                                 <input name="trigger" type="text" defaultValue={currentCommand != undefined ? currentCommand.trigger : ""}></input>
                             </label>
 
+                            <label>Titulo Redeem Twitch
+                                <input name="redeem_points_name" type="text" defaultValue={currentCommand != undefined ? currentCommand.redeem_points_name : ""}></input>
+                            </label>
                             <label>Respuesta
                                 <textarea name="response_text" defaultValue={currentCommand != undefined ? currentCommand.response_text as string : ""}></textarea>
                             </label>
@@ -93,7 +96,14 @@ const CommandList = ({ commands, create_comando, delete_command, edit_command }:
                                 </select>
                             </label>
                             <label>Permisos
-                                <input name="permits" type="text" defaultValue={currentCommand != undefined ? currentCommand.permits.content_type : ""}></input>
+                                <select name="permits" defaultValue={currentCommand != undefined ? currentCommand.permits?.content_type : PERMISSION_TYPE.ALL}>
+                                    {Object.values(PERMISSION_TYPE).map((e) => { return (<option value={e}> {e}</option>) })}
+                                </select>
+                            </label>
+                            <label>Permisos Role
+                                <select name="permits_role" multiple defaultValue={currentCommand != undefined ? currentCommand.permits?.content_type : ""}>
+                                    {Object.values(PERMISION_ROLE_TYPE).map((e) => { return (<option value={e}> {e}</option>) })}
+                                </select>
                             </label>
                             <label>Coste Puntos
                                 <input name="point_cost" type="number" defaultValue={currentCommand != undefined ? currentCommand.point_cost : 0}></input>

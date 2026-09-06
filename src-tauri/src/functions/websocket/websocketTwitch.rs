@@ -2,6 +2,7 @@ use reqwest::{header::CONTENT_TYPE, Client, Response, StatusCode};
 use tauri::http::HeaderMap;
 
 use crate::{
+    consts::SUSCRIBERS_TWITCH,
     secret_const::{BOT_TOKEN_TYPE, CLIENT_ID, STREAMER_TOKEN_TYPE},
     structs_custom, structs_twitch_api,
 };
@@ -24,32 +25,40 @@ fn get_auth_headers(type_token: &str) -> HeaderMap {
 }
 pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwest::Error> {
     let broadcaster_id: String = std::env::var("broadcaster_id").unwrap_or(String::from(""));
-    let bot_id: String = std::env::var("bot_id").unwrap_or(String::from(""));
     const URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
     let client: Client = reqwest::Client::new();
-    let headers: HeaderMap = get_auth_headers(BOT_TOKEN_TYPE);
-    let json_fake: structs_custom::BodyRequestSuscriber = structs_custom::BodyRequestSuscriber {
-        type_string: String::from("channel.chat.message"),
-        version: String::from("1"),
-        condition: structs_custom::ConditionStruct {
-            broadcaster_user_id: broadcaster_id,
-            user_id: bot_id,
-        },
-        transport: structs_custom::TransportStruct {
-            session_id: String::from(session_id),
-            method: String::from("websocket"),
-        },
-    };
-    let json_string: Option<String> = serde_json::to_string(&json_fake).ok();
-    let json_clone: String = String::from(json_string.unwrap()).replace("type_string", "type");
-    let response: Response = client
-        .post(URL)
-        .body(json_clone)
-        .headers(headers)
-        .send()
-        .await?;
-    
-    let status = response.status();
+    let headers: HeaderMap = get_auth_headers(STREAMER_TOKEN_TYPE);
+    let mut status: StatusCode = StatusCode::ACCEPTED;
+    for rw in SUSCRIBERS_TWITCH {
+        let json_fake: structs_custom::BodyRequestSuscriber =
+            structs_custom::BodyRequestSuscriber {
+                type_string: String::from(rw.to_owned()),
+                version: String::from("1"),
+                condition: structs_custom::ConditionStruct {
+                    broadcaster_user_id: broadcaster_id.clone(),
+                    user_id: broadcaster_id.clone(),
+                },
+                transport: structs_custom::TransportStruct {
+                    session_id: String::from(session_id),
+                    method: String::from("websocket"),
+                },
+            };
+        let json_string: Option<String> = serde_json::to_string(&json_fake).ok();
+        let json_clone: String = String::from(json_string.unwrap()).replace("type_string", "type");
+        let response: Response = client
+            .post(URL)
+            .body(json_clone)
+            .headers(headers.clone())
+            .send()
+            .await?;
+        
+        status = response.status();
+        println!("{}", &response.text().await.unwrap());
+        if status.is_client_error(){
+            break;
+        }
+    }
+
     Ok(status)
 }
 

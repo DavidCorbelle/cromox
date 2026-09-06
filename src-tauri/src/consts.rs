@@ -1,6 +1,73 @@
+use std::sync::Mutex;
+use serde::Deserialize;
+use tauri::{AppHandle, Manager};
+
+use crate::{structs_custom::AppRunnigConfig, structs_vtubestudio::*};
 pub fn get_access_token_url() -> String {
     return String::from("https://id.twitch.tv/oauth2/token");
 }
 
-pub const SCOPES_BOT: &'static [&'static str] = &["moderator:read:chatters","channel:bot","user:write:chat","user:read:chat"];
-pub const SCOPES_STREAMER: &'static [&'static str] = &["user:bot"];
+pub const SCOPES_BOT: &'static [&'static str] = &[
+    "moderator:read:chatters",
+    "channel:bot",
+    "user:write:chat",
+    "channel:read:redemptions",
+];
+pub const SUSCRIBERS_TWITCH: &'static [&'static str] = &[
+    "channel.chat.message",
+    "channel.channel_points_custom_reward_redemption.add"
+];
+pub const SCOPES_STREAMER: &'static [&'static str] = &["user:bot", "channel:read:redemptions","user:read:chat"];
+
+// VTUBESTUDIO
+const VTUBESTUDIO_PLUGIN_NAME: &'static str = "Cromox";
+const VTUBESTUDIO_DEVELOPER: &'static str = "Toku_Doku";
+const VTUBESTUDIO_API_NAME: &'static str = "VTubeStudioPublicAPI";
+const VTUBESTUDIO_API_VERSION: &'static str = "1.0";
+
+pub fn vtubestudio_get_auth_string(app: AppHandle) -> String {
+    let config = app.state::<Mutex<AppRunnigConfig>>();
+    // Lock the mutex to mutably access the state.
+    let config = config.lock().unwrap();
+    let token = config.token_vtubestudio.clone();
+    let message_aut: AuthSendVtubestudio = AuthSendVtubestudio {
+        apiName: String::from(VTUBESTUDIO_API_NAME),
+        apiVersion: String::from(VTUBESTUDIO_API_VERSION),
+        requestID: String::from("AuthRequest"),
+        messageType: String::from("AuthenticationRequest"),
+        data: AuthSendVtubestudioData {
+            authenticationToken: token,
+            pluginDeveloper: String::from(VTUBESTUDIO_DEVELOPER),
+            pluginName: String::from(VTUBESTUDIO_PLUGIN_NAME),
+        },
+    };
+    let string_message = serde_json::to_string(&message_aut).unwrap();
+    return string_message;
+}
+
+pub fn vtubestudio_get_models() -> String {
+    let message_aut: GetDataVtubestudio = GetDataVtubestudio {
+        apiName: String::from(VTUBESTUDIO_API_NAME),
+        apiVersion: String::from(VTUBESTUDIO_API_VERSION),
+        requestID: String::from("GetDataModels"),
+        messageType: String::from("AvailableModelsRequest"),
+        data: None,
+    };
+    let string_message = serde_json::to_string(&message_aut).unwrap();
+    return string_message;
+}
+
+pub fn vtubestudio_set_model(param: String) -> String {
+    let message_aut: GetDataVtubestudio = GetDataVtubestudio {
+        apiName: String::from(VTUBESTUDIO_API_NAME),
+        apiVersion: String::from(VTUBESTUDIO_API_VERSION),
+        requestID: String::from("SetModel"),
+        messageType: String::from("ModelLoadRequest"),
+        data: Some(DataSendVtubestudio {
+            modelID: Some(param),
+        }),
+    };
+    let string_message = serde_json::to_string(&message_aut).unwrap();
+    return string_message;
+}
+

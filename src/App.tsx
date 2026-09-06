@@ -9,7 +9,9 @@ import CommandList from "./components/configMenu/CommandList";
 import { canIUseCommand } from "./functions/function_commands";
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { ChatMessage, Command, CommandUses, COOLDOWN_TYPE, messageEvent, PayloadViewers } from "./custom-types/types.td";
+import { ChatMessage, Command, CommandUses, COOLDOWN_TYPE, messageEvent, PayloadViewers, redeemEvent } from "./custom-types/types.td";
+import MenuIntegration from "./components/integrations/MenuIntegrations";
+import ConfigMenu from "./components/configMenu/ConfigMenu";
 
 let didInit = false;
 let socketStarted = false;
@@ -107,15 +109,20 @@ function App() {
 
     } else {
       let data = JSON.parse(event.data);
+      console.log(data);
       if (data.metadata.message_type == message_types.NOTIFICATION) {
+
         if (data.metadata.subscription_type == suscription_types.CHAT_MESSAGE) {
           let event: messageEvent = data.payload.event;
-          if (event.message.text.startsWith("!") && event.chatter_user_id != botIdChat.current) {
-            try_command(event);
+          if (event.message.text.startsWith("!") && event.chatter_user_id != botIdChat.current && event.channel_points_custom_reward_id == null) {
+            try_command_message(event);
           } else {
             add_message(event);
           }
 
+        } else if (data.metadata.subscription_type == suscription_types.REWARD_REDDEM) {
+          let event: redeemEvent = data.payload.event;
+          try_command_redeem(event);
         }
       }
 
@@ -148,8 +155,23 @@ function App() {
     chatBox?.appendChild(newNode)
   }
 
-  function try_command(i: messageEvent) {
+
+  function try_command_redeem(i: redeemEvent) {
+    let messageTextCommand = i.reward.title;
+    let eventString = JSON.stringify(i);
+    let find = commands.current.filter((e) => { return (e.redeem_points_name == messageTextCommand) })
+    if (find.length > 0) {
+      let command = find[0];
+      if (command.enabled == true) {
+        invoke('execute_command_redeem', { eventString });
+      }
+
+    }
+  }
+
+  function try_command_message(i: messageEvent) {
     let messageTextCommand = i.message.text;
+    let eventString = JSON.stringify(i);
     let command_string: string = messageTextCommand.split(" ")[0].replace("!", "");
     let find = commands.current.filter((e) => { return (e.trigger == command_string) })
     if (find.length > 0) {
@@ -157,7 +179,7 @@ function App() {
       let usable = canIUseCommand(command.command_id, i.chatter_user_id, command.cooldown, commandUses.current);
       if (usable && command.enabled == true) {
         commandUses.current.push({ commandIdUsed: command.command_id, lastTimeUsed: new Date(), userId: i.chatter_user_id });
-        invoke('execute_command', { messageTextCommand });
+        invoke('execute_command_message', { eventString });
 
       }
 
@@ -194,6 +216,7 @@ function App() {
       command_id: command_id,
       command_name: data.get("command_name") as string,
       trigger: data.get("trigger") as string,
+      redeem_points_name: data.get("redeem_points_name") as string,
       content_type: {
         content_type: TIPO_COMANDO_TEXTO.FULL_TEXT,
         position_data: null
@@ -204,7 +227,7 @@ function App() {
         sound_volume: isNaN(Number.parseInt(data.get("sound_volume") as string)) ? 100 : Number.parseInt(data.get("sound_volume") as string) * 100,
       },
       permits: {
-        content_type: "AllAccess",
+        content_type: data.get("permits") as string,
         rol_permit: null,
         user_permit: null
       },
@@ -263,6 +286,7 @@ function App() {
     }
     let commandData = JSON.stringify(new_command);
     commands.current = tmpCommands;
+    console.log(commandData);
     invoke('edit_command', { commandId, commandData }).then(() => { update_commands() })
   }
 
@@ -282,10 +306,20 @@ function App() {
           delete_command={delete_command}
           edit_command={edit_command}
         ></CommandList>)
-
+      case MENU_ACTUAL.INTEGRACIONES:
+        return (<MenuIntegration
+        ></MenuIntegration>)
+      case MENU_ACTUAL.CONFIG:
+        return (<ConfigMenu
+        ></ConfigMenu>)
       default:
         break;
     }
+  }
+  function invokeTest() {
+    let action = "SET_MODEL";
+    let param = "05b6f827e83845e39ab174dbe455bddc";
+    invoke('actions_vtubestudio', { action, param });
   }
 
   return (
@@ -294,6 +328,8 @@ function App() {
       <div className="botoneraNav">
         <button onClick={() => setCurrentMenu(MENU_ACTUAL.CHAT)}>Chat</button>
         <button onClick={() => setCurrentMenu(MENU_ACTUAL.COMANDOS)}>Comandos</button>
+        <button onClick={() => setCurrentMenu(MENU_ACTUAL.INTEGRACIONES)}>Integraciones</button>
+        <button onClick={() => setCurrentMenu(MENU_ACTUAL.CONFIG)}>Configuracion</button>
         <button onClick={() => setCurrentMenu(MENU_ACTUAL.TOKENS)}>TOKENS</button>
         <p>{dataLoaded}</p>
         <p className="debug-data">{greetMsg}</p>
@@ -312,9 +348,10 @@ function App() {
         {renderCurrentView()}
       </div>
 
-
+      <button onClick={() => { invokeTest() }}>TEST</button>
     </main>
   );
 }
 
 export default App;
+

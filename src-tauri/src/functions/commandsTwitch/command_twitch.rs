@@ -7,12 +7,7 @@ use std::io::BufReader;
 use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
 
-pub async fn execute_command(message_text_command: &str) -> Result<String, String> {
-    let message_split: Vec<&str> = message_text_command.split(' ').collect();
-    let command_trigger: String = message_split[0].replace("!", "");
-    let command: CommandStruct = get_command_by_trigger(command_trigger)
-        .await
-        .unwrap_or(CommandStruct::default());
+pub async fn execute_command(command:CommandStruct, message_string:&str) -> Result<String, String> {
     if command != CommandStruct::default() && command.enabled == true {
         if command.response_text != String::from("") {
             let _res: Result<reqwest::Response, reqwest::Error> =

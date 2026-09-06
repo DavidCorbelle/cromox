@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 #[derive(Serialize)]
 pub struct ConditionStruct {
@@ -31,6 +33,7 @@ pub struct CommandStruct {
     pub command_id: u16,
     pub command_name: String,
     pub trigger: String,
+    pub redeem_points_name: String,
     pub content_type: CommandStructContent,
     pub response_text: String,
     pub sound: CommandStructSound,
@@ -70,7 +73,7 @@ pub struct CommandStructIntegration {
 pub struct CommandStructCooldown {
     pub units: u16,
     pub type_unit: String,
-    pub type_cooldown: Option<String>
+    pub type_cooldown: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Default)]
@@ -85,5 +88,11 @@ pub struct PointUserTwitchStruct {
     pub user_id: String,
     pub time_watch_mins: u32,
     pub last_known_name: String,
-    pub existe_db:bool
+    pub existe_db: bool,
+}
+
+
+#[derive(Default)]
+pub struct AppRunnigConfig {
+  pub token_vtubestudio: String,
 }

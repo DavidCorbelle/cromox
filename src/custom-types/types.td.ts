@@ -48,46 +48,84 @@ export type messageEvent = {
     "channel_points_animation_id": any
 }
 
-export type Command  = {
-     command_id: Number,
-      command_name: string,
-      trigger: string,
-      content_type: CommandStructContent,
-      response_text: string|null,
-      sound: CommandStructSoundData|null,
-      permits: CommandStructPermitType,
-      integration: CommandStrucIntegrationType|null,
-      cooldown: CommandStrucCooldownType|null,
-      point_cost: number,
-      enabled: boolean
+export type redeemEvent = {
+    broadcaster_user_id: string,
+    broadcaster_user_login: string,
+    broadcaster_user_name: string,
+    id: string,
+    redeemed_at: string,
+    reward: redeemEventData,
+    status: string,
+    user_id: string,
+    user_input: string,
+    user_login: string,
+    user_name: string
+}
+export type redeemEventData = {
+    cost: Number
+    id: string,
+    prompt: string,
+    title: string
+}
+
+
+export type Command = {
+    command_id: Number,
+    command_name: string,
+    trigger: string,
+    redeem_points_name: string,
+    content_type: CommandStructContent,
+    response_text: string | null,
+    sound: CommandStructSoundData | null,
+    permits: CommandStructPermitType,
+    integration: CommandStrucIntegrationType | null,
+    cooldown: CommandStrucCooldownType | null,
+    point_cost: number,
+    enabled: boolean
 }
 
 export type CommandStructPermitType = {
-        content_type: string,
-        rol_permit: Array<string>|null,
-        user_permit: Array<string>|null
+    content_type: string,
+    rol_permit: Array<string> | null,
+    user_permit: Array<string> | null
 }
 export type CommandStrucIntegrationType = {
-        http_endpoint: string,
-        use_integration: string|null,
-        data_integration: null
+    http_endpoint: string,
+    use_integration: string | null,
+    data_integration: null
 }
 export type CommandStrucCooldownType = {
-       units: number,
-       type_unit: "SECONDS",
-       type_cooldown:COOLDOWN_TYPE;
+    units: number,
+    type_unit: "SECONDS",
+    type_cooldown: COOLDOWN_TYPE;
 }
 
 export enum COOLDOWN_TYPE {
-    GENERAL="GENERAL",
-    USER="USER"
+    GENERAL = "GENERAL",
+    USER = "USER"
 }
 
-export type CommandStructContent= {
+export enum PERMISSION_TYPE {
+    ALL = "ALL",
+    ROLE = "ROLE",
+    USERNAME = "USERNAME"
+}
+
+export enum PERMISION_ROLE_TYPE {
+    moderator = "moderator",
+    broadcaster = "broadcaster",
+    subscriber = "subscriber",
+    vip = "vip",
+    founder = "founder"
+
+}
+
+
+export type CommandStructContent = {
     content_type: String,
     position_data: Array<CommandStructContentPositionData> | null,
 }
- export type CommandStructContentPositionData = {
+export type CommandStructContentPositionData = {
     position: String,
     param_name: String
 }

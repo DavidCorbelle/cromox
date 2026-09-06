@@ -20,6 +20,12 @@ pub fn get_migrations() -> Vec<Migration>{
             description: "create_table_tokens",
             sql:"CREATE TABLE tokens_bot ( type_token TEXT, refresh_token TEXT, expires_in NUMERIC, expire_date TEXT, user_id TEXT) ;",
             kind: MigrationKind::Up
+        },
+        Migration {
+            version: 4,
+            description: "add_redeem_points_name",
+            sql:"ALTER TABLE commands_twitch ADD redeem_points_name TEXT",
+            kind:MigrationKind::Up
         }
     ];   
     return migrations;

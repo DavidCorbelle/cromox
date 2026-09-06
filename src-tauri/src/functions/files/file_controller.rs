@@ -4,7 +4,7 @@ use crate::{
     structs_custom::{self, CommandStruct, PointUserTwitchStruct},
     structs_twitch_api, websocket_twitch,
 };
-use reqwest::{ Client, Response};
+use reqwest::{Client, Response};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteQueryResult},
     Row, SqlitePool,
@@ -36,7 +36,6 @@ fn get_config_path(file_name: &str) -> String {
     return path;
 }
 
-
 pub async fn load_config_token() -> Result<String, String> {
     let con: SqlitePool = get_connection().await.unwrap();
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
@@ -50,6 +49,9 @@ pub async fn load_config_token() -> Result<String, String> {
             if type_token == STREAMER_TOKEN_TYPE {
                 let broadcaster_id: &str = i.get("user_id");
                 std::env::set_var("broadcaster_id", broadcaster_id);
+                let refresh_token: &str = i.get("refresh_token");
+                let token = get_access_token(refresh_token).await.unwrap();
+                std::env::set_var("tokenStreamer", token);
             } else if type_token == BOT_TOKEN_TYPE {
                 let bot_id: &str = i.get("user_id");
                 std::env::set_var("bot_id", bot_id);
@@ -82,6 +84,7 @@ pub async fn get_command_by_trigger(command_trigger: String) -> Result<CommandSt
             let return_data = CommandStruct {
                 command_id: i.get("id"),
                 command_name: i.get("command_name"),
+                redeem_points_name: i.get("redeem_points_name"),
                 trigger: i.get("trigger"),
                 content_type: serde_json::from_str(i.get("content_type")).unwrap(),
                 response_text: i.get("response_text"),
@@ -100,6 +103,40 @@ pub async fn get_command_by_trigger(command_trigger: String) -> Result<CommandSt
         Err(String::from("No se ha encontrado el comando"))
     }
 }
+pub async fn get_command_by_redeem_title(command_trigger: String) -> Result<CommandStruct, String> {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+        sqlx::query("SELECT * FROM commands_twitch WHERE redeem_points_name=$1")
+            .bind(command_trigger)
+            .fetch_all(&con)
+            .await;
+    if result.is_ok() {
+        let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+        if result_query.len() > 0 {
+            let i = result_query.get(0).unwrap();
+            let return_data = CommandStruct {
+                command_id: i.get("id"),
+                command_name: i.get("command_name"),
+                redeem_points_name: i.get("redeem_points_name"),
+                trigger: i.get("trigger"),
+                content_type: serde_json::from_str(i.get("content_type")).unwrap(),
+                response_text: i.get("response_text"),
+                sound: serde_json::from_str(i.get("sound")).unwrap(),
+                permits: serde_json::from_str(i.get("permits")).unwrap(),
+                cooldown: serde_json::from_str(i.get("cooldown")).unwrap(),
+                integration: serde_json::from_str(i.get("integration")).unwrap(),
+                point_cost: i.get("point_cost"),
+                enabled: i.get("enabled"),
+            };
+            Ok(return_data)
+        } else {
+            Err(String::from("No se ha encontrado el comando"))
+        }
+    } else {
+        Err(String::from("No se ha encontrado el comando"))
+    }
+}
+
 pub async fn get_commands() -> Result<Vec<CommandStruct>, ()> {
     let mut return_data: Vec<CommandStruct> = vec![];
     let con: SqlitePool = get_connection().await.unwrap();
@@ -113,6 +150,7 @@ pub async fn get_commands() -> Result<Vec<CommandStruct>, ()> {
             return_data.push(structs_custom::CommandStruct {
                 command_id: i.get("id"),
                 command_name: i.get("command_name"),
+                redeem_points_name: i.get("redeem_points_name"),
                 trigger: i.get("trigger"),
                 content_type: serde_json::from_str(i.get("content_type")).unwrap(),
                 response_text: i.get("response_text"),
@@ -147,7 +185,7 @@ pub async fn save_new_command(data: String) -> Result<String, ()> {
     let new_command_integration: String =
         serde_json::to_string(&new_command.integration.clone()).unwrap();
     let _result: SqliteQueryResult = sqlx::query(
-        "INSERT into commands_twitch (command_name, trigger, content_type, response_text, sound, permits, cooldown, integration, point_cost) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        "INSERT into commands_twitch (command_name, trigger, content_type, response_text, sound, permits, cooldown, integration, point_cost, redeem_points_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
     )
     .bind(new_command.command_name)
     .bind(new_command.trigger)
@@ -158,6 +196,7 @@ pub async fn save_new_command(data: String) -> Result<String, ()> {
     .bind(new_command_cooldown)
     .bind(new_command_integration)
     .bind(new_command.point_cost)
+    .bind(new_command.redeem_points_name)
     .execute(&con)
     .await
     .unwrap();
@@ -165,6 +204,7 @@ pub async fn save_new_command(data: String) -> Result<String, ()> {
 }
 
 pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
+    println!("Edit");
     let new_command: structs_custom::CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
     let con: SqlitePool = get_connection().await.unwrap();
     let new_command_content_type: String =
@@ -176,7 +216,7 @@ pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
     let new_command_integration: String =
         serde_json::to_string(&new_command.integration.clone()).unwrap();
     let _result: SqliteQueryResult = sqlx::query(
-        "UPDATE commands_twitch SET command_name = $1, trigger= $2, content_type= $3, response_text= $4, sound= $5, permits= $6, cooldown= $7, integration= $8, point_cost = $9 WHERE id = $10",
+        "UPDATE commands_twitch SET command_name = $1, trigger= $2, content_type= $3, response_text= $4, sound= $5, permits= $6, cooldown= $7, integration= $8, point_cost = $9,redeem_points_name = $11  WHERE id = $10",
     )
     .bind(new_command.command_name)
     .bind(new_command.trigger)
@@ -188,9 +228,11 @@ pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
     .bind(new_command_integration)
     .bind(new_command.point_cost)
     .bind(id)
+    .bind(new_command.redeem_points_name)
     .execute(&con)
     .await
     .unwrap();
+    println!("Rows Affected{}", _result.rows_affected());
     Ok(String::from("Ok"))
 }
 
@@ -229,6 +271,42 @@ pub async fn get_all_points_user() -> Result<Vec<PointUserTwitchStruct>, ()> {
     Ok(return_data)
 }
 
+pub async fn get_points_user(user_id: String) -> Result<Vec<PointUserTwitchStruct>, ()> {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let mut return_data: Vec<PointUserTwitchStruct> = vec![];
+
+    let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+        sqlx::query("SELECT * FROM users_twitch WHERE id=$1")
+            .bind(user_id)
+            .fetch_all(&con)
+            .await;
+    if result.is_ok() {
+        let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+        for i in result_query {
+            return_data.push(structs_custom::PointUserTwitchStruct {
+                points: i.get("points"),
+                user_id: i.get("id"),
+                time_watch_mins: i.get("time_watch_mins"),
+                last_known_name: i.get("name"),
+                existe_db: true,
+            });
+        }
+    }
+    con.close().await;
+    Ok(return_data)
+}
+
+pub async fn save_points_user(user_id: String, current_points: u32) {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let _result: SqliteQueryResult =
+        sqlx::query("UPDATE users_twitch SET  points = $2 WHERE id = $1")
+            .bind(user_id)
+            .bind(current_points)
+            .execute(&con)
+            .await
+            .unwrap();
+}
+
 pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUserTwitchStruct>) {
     let insert: Vec<_> = points_file_data
         .iter()
@@ -239,7 +317,6 @@ pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUse
         .filter(|&x| x.existe_db == true)
         .collect();
     let con: SqlitePool = get_connection().await.unwrap();
-    let data_string = serde_json::to_string(&points_file_data).unwrap();
     for i in insert {
         let _result: SqliteQueryResult = sqlx::query(
             "INSERT INTO users_twitch (id , name, points,time_watch_mins ) VALUES ($1,$2,$3,$4)",
@@ -269,7 +346,9 @@ pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUse
 
 pub async fn check_tokens(app: AppHandle) {
     let token_bot = std::env::var("tokenBot").ok().unwrap_or(String::from(""));
-    let token_streamer = std::env::var("tokenBot").ok().unwrap_or(String::from(""));
+    let token_streamer = std::env::var("tokenStreamer")
+        .ok()
+        .unwrap_or(String::from(""));
     let broadcaster_id = std::env::var("broadcaster_id")
         .ok()
         .unwrap_or(String::from(""));

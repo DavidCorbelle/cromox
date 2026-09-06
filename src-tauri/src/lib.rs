@@ -1,10 +1,15 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 // Made by David Corbelle García
+use evdev::*;
 use reqwest::{self, Error, Response, StatusCode};
-use std::env;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use tauri::{AppHandle, Emitter};
+use std::sync::Mutex;
+use std::{env, fs};
+use tauri::{AppHandle, Emitter, Manager};
+use crate::structs_custom::{AppRunnigConfig, CommandStruct, PointUserTwitchStruct};
+use crate::structs_twitch_api::{MessageTwitchEvent, RedeemTwitchEvent};
+use crate::structs_vtubestudio::{VTUBESTUDIO_ACTIONS};
 
 #[path = "functions/commandsTwitch/command_twitch.rs"]
 mod command_twitch;
@@ -20,6 +25,10 @@ mod secret_const;
 mod structs_custom;
 #[path = "structs/structs_twitch_api.rs"]
 mod structs_twitch_api;
+#[path = "structs/structs_vtubestudio.rs"]
+mod structs_vtubestudio;
+#[path = "functions/integrations/vtubestudio.rs"]
+mod vtubestudio;
 #[path = "functions/websocket/websocketTwitch.rs"]
 mod websocket_twitch;
 
@@ -34,7 +43,6 @@ async fn send_message_twitch(message: &str) -> Result<String, ()> {
         websocket_twitch::send_message_twitch(message).await;
     let response_string: String;
     if response.is_ok() {
-        let response_string2 = response.unwrap().text().await.unwrap();
         response_string = String::from("Mensaje enviado con exito");
     } else {
         response_string = String::from("Ha ocurrido un error");
@@ -81,6 +89,16 @@ async fn delete_command(command_id: u16) -> Result<String, ()> {
 
 #[tauri::command]
 async fn start_data_config(app: AppHandle) -> Result<String, ()> {
+    tokio::spawn(vtubestudio::get_token_vtubestudio(app.clone()));
+    let paths = fs::read_dir("/dev/input/").unwrap();
+    for path in paths {
+        let path_check = path.unwrap();
+        let path_dir = path_check.file_name().display().to_string();
+        if !path_check.file_type().unwrap().is_dir() {
+            // tokio::spawn(start_check_hotkeys(path_dir));
+        }
+    }
+
     let _res: String = file_controller::load_config_token()
         .await
         .unwrap_or(String::from("Error"));
@@ -114,6 +132,66 @@ async fn get_data_commands() -> Result<String, ()> {
     Ok(res)
 }
 
+async fn start_check_hotkeys(path: String) {
+    let device_test = Device::open(format!("/dev/input/{}", path));
+    if device_test.is_ok() {
+        let mut device = device_test.unwrap();
+        let supported_keys: &AttributeSetRef<KeyCode> = device.supported_keys().unwrap();
+        let keys: Vec<KeyCode> = supported_keys.iter().collect();
+        let is_keyboard: Vec<&KeyCode> = keys
+            .iter()
+            .filter(|x| x.code() == KeyCode::KEY_A.code())
+            .collect();
+        //println!("{props}");
+        if is_keyboard.len() > 0 {
+            let mut keys_pressed: Vec<KeyCode> = vec![];
+            loop {
+                for event in device.fetch_events().unwrap() {
+                    match event.destructure() {
+                        EventSummary::Key(_ev, key_type, 1) => {
+                            //println!("Key {:?} was pressed, got event: {:?}", key_type, ev);
+                            keys_pressed.push(key_type);
+                            let mut keys_pressed_vect_string: Vec<String> = vec![];
+                            for k in keys_pressed.clone() {
+                                let key = format!("{:?}", k);
+                                let key_string: String = key.replace("KEY_", "");
+                                keys_pressed_vect_string.push(key_string);
+                            }
+                            let keys_pressed_string = keys_pressed_vect_string.join(" + ");
+                            println!("Teclas pulsadas {:?}", keys_pressed_string);
+                        }
+                        EventSummary::Key(_ev, key_type, 0) => {
+                            //println!("Key {:?} was released", key_type);
+                            let index: Option<usize> = keys_pressed
+                                .iter()
+                                .position(|r: &KeyCode| r.code() == key_type.code());
+                            if index.is_some() {
+                                keys_pressed.remove(index.unwrap());
+                            }
+                            //   let keys_pressed_string:Iterator<KeyCode> = keys_pressed.iter().map(|f| f);
+
+                            let mut keys_pressed_vect_string: Vec<String> = vec![];
+                            for k in keys_pressed.clone() {
+                                let key = format!("{:?}", k);
+                                let key_string: String = key.replace("KEY_", "");
+                                keys_pressed_vect_string.push(key_string);
+                            }
+                            let keys_pressed_string = keys_pressed_vect_string.join(" + ");
+                            println!("Teclas pulsadas {:?}", keys_pressed_string);
+                            //let _test = format!("{:?}",keys_pressed);
+                            //println!("Keys pressed {:?} was released", ev);
+                        }
+                        EventSummary::AbsoluteAxis(_, axis, value) => {
+                            println!("The Axis {:?} was moved to {}", axis, value);
+                        }
+                        _ => print!(""),
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[tauri::command]
 async fn implement_suscribers(session_id: &str, app: AppHandle) -> Result<String, String> {
     let response: Result<StatusCode, Error> =
@@ -135,11 +213,62 @@ async fn implement_suscribers(session_id: &str, app: AppHandle) -> Result<String
 }
 
 #[tauri::command]
-async fn execute_command(message_text_command: &str) -> Result<String, ()> {
-    let _res: String = command_twitch::execute_command(message_text_command)
-        .await
-        .unwrap();
-    Ok(_res)
+async fn execute_command_message(event_string: &str) -> Result<String, ()> {
+    println!("{}", event_string);
+    let event = serde_json::from_str(event_string);
+    if event.is_err() {
+        let error = event.unwrap_err();
+        println!("{}", error.to_string());
+        Ok(String::from("event"))
+    } else {
+        let event_ok: MessageTwitchEvent = event.unwrap();
+        let message_text_command = event_ok.message.text;
+        let message_split: Vec<&str> = message_text_command.split(' ').collect();
+        let command_trigger: String = message_split[0].replace("!", "");
+        let user_bot_container: Vec<PointUserTwitchStruct> =
+            file_controller::get_points_user(event_ok.chatter_user_id)
+                .await
+                .unwrap();
+        let user_bot = user_bot_container.get(0).unwrap();
+
+        let command: CommandStruct = file_controller::get_command_by_trigger(command_trigger)
+            .await
+            .unwrap_or(CommandStruct::default());
+        if user_bot.points >= command.point_cost {
+            let _res: String =
+                command_twitch::execute_command(command.clone(), message_text_command.as_str())
+                    .await
+                    .unwrap();
+            let actual_points = user_bot.points - command.point_cost;
+            file_controller::save_points_user(user_bot.user_id.clone(), actual_points).await;
+            Ok(_res)
+        } else {
+            Ok(String::from(
+                "No se ha podido lanzar el comando por falta de puntos",
+            ))
+        }
+    }
+}
+
+#[tauri::command]
+async fn execute_command_redeem(event_string: &str) -> Result<String, ()> {
+    println!("{}", event_string);
+    let event = serde_json::from_str(event_string);
+    if event.is_err() {
+        let error = event.unwrap_err();
+        println!("{}", error.to_string());
+        Ok(String::from("event"))
+    } else {
+        let event_ok: RedeemTwitchEvent = event.unwrap();
+        let command_trigger: String = event_ok.reward.title;
+        let command: CommandStruct = file_controller::get_command_by_redeem_title(command_trigger)
+            .await
+            .unwrap_or(CommandStruct::default());
+        let _res: String = command_twitch::execute_command(command, &event_ok.user_input.as_str())
+            .await
+            .unwrap();
+        Ok(_res)
+    }
 }
 
 #[tauri::command]
@@ -147,6 +276,34 @@ async fn get_url_token(token_type: String, app: AppHandle) -> Result<String, ()>
     tokio::spawn(get_auth_token(token_type.clone(), app));
     Ok(secret_const::get_token_url(token_type))
 }
+
+#[tauri::command]
+async fn actions_vtubestudio(
+    action: VTUBESTUDIO_ACTIONS,
+    param: String,
+    app: AppHandle,
+) -> Result<String, ()> {
+    let mut response = String::from("");
+
+    match action {
+        VTUBESTUDIO_ACTIONS::GET_MODELS => {
+            let message: String = consts::vtubestudio_get_models();
+            response = vtubestudio::send_websocket_vtubestudio(message, app.clone())
+                .await
+                .unwrap_or(String::from("Error"));
+        }
+        VTUBESTUDIO_ACTIONS::SET_MODEL => {
+            let message: String = consts::vtubestudio_set_model(param);
+            response = vtubestudio::send_websocket_vtubestudio(message, app.clone())
+                .await
+                .unwrap_or(String::from("Error"));
+        }
+        _ => {}
+    }
+    Ok(response)
+}
+
+
 
 async fn get_auth_token(token_type: String, app: AppHandle) {
     let listener = TcpListener::bind(("127.0.0.1", 8080));
@@ -188,7 +345,6 @@ async fn get_auth_token(token_type: String, app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env::set_var("RUST_BACKTRACE", "1");
-
     let migrations: Vec<tauri_plugin_sql::Migration> = migrations_db::get_migrations();
 
     tauri::Builder::default()
@@ -199,6 +355,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            app.manage(Mutex::new(AppRunnigConfig::default()));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_bot_id,
             implement_suscribers,
@@ -208,8 +368,10 @@ pub fn run() {
             get_data_commands,
             edit_command,
             delete_command,
-            execute_command,
-            get_url_token
+            execute_command_message,
+            get_url_token,
+            actions_vtubestudio,
+            execute_command_redeem
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
