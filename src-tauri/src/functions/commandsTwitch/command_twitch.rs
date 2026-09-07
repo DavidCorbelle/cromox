@@ -1,4 +1,4 @@
-use crate::file_controller::{self};
+use crate::db_controller::{self};
 use crate::structs_custom::{self, CommandStruct, PointUserTwitchStruct};
 use crate::structs_twitch_api::{self};
 use crate::websocket_twitch;
@@ -39,7 +39,7 @@ pub async fn twitch_points(app: AppHandle) {
     std::env::set_var("points_started", String::from("S"));
     loop {
         let points_file: Vec<structs_custom::PointUserTwitchStruct> =
-            file_controller::get_all_points_user().await.unwrap();
+            db_controller::get_all_points_user().await.unwrap();
         let mut points_update: Vec<structs_custom::PointUserTwitchStruct> = vec![];
         let chatters: Vec<structs_twitch_api::ChatterList> = get_chatters_list().await;
         let old_chatters_string: String =
@@ -79,12 +79,13 @@ pub async fn twitch_points(app: AppHandle) {
                 }
             }
         }
-        file_controller::save_all_points_user(points_update).await;
+        db_controller::save_all_points_user(points_update).await;
         let chatters_string = serde_json::to_string(&chatters).ok().unwrap();
         let _emit = app.emit("refresh-viewers", chatters_string.clone());
         std::env::set_var("old_chatters", chatters_string);
 
-        sleep(Duration::from_mins(5)).await
+        sleep(Duration::from_mins(5)).await;
+        println!("Vuelta");
     }
 }
 

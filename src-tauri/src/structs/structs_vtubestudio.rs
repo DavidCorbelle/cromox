@@ -37,17 +37,26 @@ pub struct GetDataVtubestudio {
     pub apiVersion: String,
     pub requestID: String,
     pub messageType: String,
-    pub data: Option<DataSendVtubestudio>
+    pub data: Option<DataVtubestudio>,
 }
 #[derive(Serialize, Deserialize, Clone)]
-pub struct DataSendVtubestudio {
-    pub modelID:Option<String>
+pub struct DataVtubestudio {
+    pub modelID: Option<String>,
+    pub numberOdModels: Option<u32>,
+    pub availableModels: Option<Vec<ModelDataVtubestudio>>,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ModelDataVtubestudio {
+    pub modelLoaded: bool,
+    pub modelName: String,
+    pub modelID: String,
+    pub vtsModelName: String,
+    pub vtsModelIconName: String,
 }
 
 #[derive(Copy, Clone, Deserialize)]
 pub enum VTUBESTUDIO_ACTIONS {
     NONE = 0,
     GET_MODELS = 1,
-    SET_MODEL = 2
-    
+    SET_MODEL = 2,
 }

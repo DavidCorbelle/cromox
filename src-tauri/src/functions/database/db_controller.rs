@@ -2,7 +2,9 @@ use crate::{
     consts,
     secret_const::{self, BOT_TOKEN_TYPE, CLIENT_ID, CLIENT_SECRET, STREAMER_TOKEN_TYPE},
     structs_custom::{self, CommandStruct, PointUserTwitchStruct},
-    structs_twitch_api, websocket_twitch,
+    structs_twitch_api,
+    structs_vtubestudio::ModelDataVtubestudio,
+    websocket_twitch,
 };
 use reqwest::{Client, Response};
 use sqlx::{
@@ -308,35 +310,15 @@ pub async fn save_points_user(user_id: String, current_points: u32) {
 }
 
 pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUserTwitchStruct>) {
-    let insert: Vec<_> = points_file_data
-        .iter()
-        .filter(|&x| x.existe_db == false)
-        .collect();
-    let update: Vec<_> = points_file_data
-        .iter()
-        .filter(|&x| x.existe_db == true)
-        .collect();
     let con: SqlitePool = get_connection().await.unwrap();
-    for i in insert {
+    for i in points_file_data.clone() {
         let _result: SqliteQueryResult = sqlx::query(
-            "INSERT INTO users_twitch (id , name, points,time_watch_mins ) VALUES ($1,$2,$3,$4)",
+            "INSERT INTO users_twitch (id , name, points,time_watch_mins ) VALUES ($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name = excluded.name, points = excluded.points, time_watch_mins = excluded.time_watch_mins",
         )
         .bind(i.user_id.clone())
         .bind(i.last_known_name.clone())
         .bind(i.points)
         .bind(i.time_watch_mins)
-        .execute(&con)
-        .await
-        .unwrap();
-    }
-    for u in update {
-        let _result: SqliteQueryResult = sqlx::query(
-            "UPDATE users_twitch SET name = $2, points = $3, time_watch_mins = $4 WHERE id = $1",
-        )
-        .bind(u.user_id.clone())
-        .bind(u.last_known_name.clone())
-        .bind(u.points)
-        .bind(u.time_watch_mins)
         .execute(&con)
         .await
         .unwrap();
@@ -438,4 +420,71 @@ async fn get_access_token(refresh_token: &str) -> Result<String, ()> {
     let response_object: structs_twitch_api::AccessTokenResponseTwitch =
         serde_json::from_str(&response_string).unwrap();
     Ok(response_object.access_token)
+}
+
+pub async fn save_token_integration(integration_name: &str, token: String) {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let _result: SqliteQueryResult = sqlx::query(
+        "INSERT INTO integrations (app, token) VALUES ($1, $2) ON CONFLICT(app) DO UPDATE SET token = excluded.token;",
+    )
+    .bind(integration_name)
+    .bind(token)
+    .execute(&con)
+    .await
+    .unwrap();
+}
+
+pub async fn get_token_integration(integration_name: &str) -> Result<String, ()> {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+        sqlx::query("SELECT * FROM  integrations  WHERE app = $1")
+            .bind(integration_name)
+            .fetch_all(&con)
+            .await;
+    if result.is_ok() {
+        let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+        if result_query.len() > 0 {
+            let mut token: String = String::from("");
+            for l in result_query {
+                token = l.get("token");
+            }
+            Ok(token)
+        } else {
+            Ok(String::from(""))
+        }
+    } else {
+        Ok(String::from(""))
+    }
+}
+
+pub async fn save_model_vtubestudio_api(model: ModelDataVtubestudio) {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let _result: SqliteQueryResult = sqlx::query(
+        "INSERT INTO VTubeStudio_models (model_id, model_name) VALUES ($1, $2) ON CONFLICT(model_id) DO UPDATE SET model_name = excluded.model_name;",
+    )
+    .bind(model.modelID)
+    .bind(model.modelName)
+    .execute(&con)
+    .await
+    .unwrap();
+}
+
+pub async fn get_all_models_vtubestudio() -> Result<Vec<structs_custom::ModelDataFront>,()> {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let mut  models = vec![];
+    let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+        sqlx::query("SELECT * FROM VTubeStudio_models")
+            .fetch_all(&con)
+            .await;
+    if result.is_ok() {
+        let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+        for i in result_query {
+            models.push(structs_custom::ModelDataFront {
+                model_name: i.get("model_name"),
+                model_id: i.get("model_id"),
+                model_shortcut: i.get("model_shortcut")
+            });
+        }
+    }
+    Ok(models)
 }

@@ -1,7 +1,4 @@
-use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
-
-use crate::{structs_custom::AppRunnigConfig, structs_vtubestudio::*};
+use crate::{structs_vtubestudio::*};
 pub fn get_access_token_url() -> String {
     return String::from("https://id.twitch.tv/oauth2/token");
 }
@@ -10,7 +7,7 @@ pub const SCOPES_BOT: &'static [&'static str] = &[
     "moderator:read:chatters",
     "channel:bot",
     "user:write:chat",
-    "channel:read:redemptions",
+    "user:read:chat"
 ];
 pub const SUSCRIBERS_TWITCH: &'static [&'static str] = &[
     "channel.chat.message",
@@ -24,11 +21,7 @@ const VTUBESTUDIO_DEVELOPER: &'static str = "Toku_Doku";
 const VTUBESTUDIO_API_NAME: &'static str = "VTubeStudioPublicAPI";
 const VTUBESTUDIO_API_VERSION: &'static str = "1.0";
 
-pub fn vtubestudio_get_auth_string(app: AppHandle) -> String {
-    let config = app.state::<Mutex<AppRunnigConfig>>();
-    // Lock the mutex to mutably access the state.
-    let config = config.lock().unwrap();
-    let token = config.token_vtubestudio.clone();
+pub fn vtubestudio_get_auth_string(token:String) -> String {
     let message_aut: AuthSendVtubestudio = AuthSendVtubestudio {
         apiName: String::from(VTUBESTUDIO_API_NAME),
         apiVersion: String::from(VTUBESTUDIO_API_VERSION),
@@ -62,8 +55,10 @@ pub fn vtubestudio_set_model(param: String) -> String {
         apiVersion: String::from(VTUBESTUDIO_API_VERSION),
         requestID: String::from("SetModel"),
         messageType: String::from("ModelLoadRequest"),
-        data: Some(DataSendVtubestudio {
+        data: Some(DataVtubestudio {
             modelID: Some(param),
+            availableModels: None,
+            numberOdModels: None
         }),
     };
     let string_message = serde_json::to_string(&message_aut).unwrap();

@@ -1,0 +1,14 @@
+export const MENU_OPTIONS_VTUBESTUDIO = {
+    CONFIGURACION: 0,
+    AVATARES: 1,
+    EXPRESIONES: 2,
+    ASSETS: 3
+}
+
+
+export const VTUBESTUDIO_ACTIONS = {
+    NONE: "NONE",
+    GET_MODELS: "GET_MODELS",
+    SET_MODEL: "SET_MODEL"
+}
+

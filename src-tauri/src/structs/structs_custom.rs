@@ -89,8 +89,9 @@ pub struct PointUserTwitchStruct {
     pub existe_db: bool,
 }
 
-
-#[derive(Default)]
-pub struct AppRunnigConfig {
-  pub token_vtubestudio: String,
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ModelDataFront {
+    pub model_name:String,
+    pub model_id:String,
+    pub model_shortcut:String
 }

@@ -1,22 +1,21 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 // Made by David Corbelle García
-use evdev::*;
+use crate::structs_custom::{ CommandStruct, PointUserTwitchStruct};
+use crate::structs_twitch_api::{MessageTwitchEvent, RedeemTwitchEvent};
+use crate::structs_vtubestudio::VTUBESTUDIO_ACTIONS;
 use reqwest::{self, Error, Response, StatusCode};
+use std::env;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::Mutex;
-use std::{env, fs};
-use tauri::{AppHandle, Emitter, Manager};
-use crate::structs_custom::{AppRunnigConfig, CommandStruct, PointUserTwitchStruct};
-use crate::structs_twitch_api::{MessageTwitchEvent, RedeemTwitchEvent};
-use crate::structs_vtubestudio::{VTUBESTUDIO_ACTIONS};
+use tauri::{AppHandle, Emitter};
 
 #[path = "functions/commandsTwitch/command_twitch.rs"]
 mod command_twitch;
 #[path = "consts.rs"]
 mod consts;
-#[path = "functions/files/file_controller.rs"]
-mod file_controller;
+#[path = "functions/database/db_controller.rs"]
+mod db_controller;
+#[path = "functions/integrations/linux.rs"]
+mod intg_linux;
 #[path = "migrations.rs"]
 mod migrations_db;
 #[path = "secret_const.rs"]
@@ -52,7 +51,7 @@ async fn send_message_twitch(message: &str) -> Result<String, ()> {
 
 #[tauri::command]
 async fn save_new_command(command_data: String) -> Result<String, ()> {
-    let response: Result<String, ()> = file_controller::save_new_command(command_data).await;
+    let response: Result<String, ()> = db_controller::save_new_command(command_data).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Comando guardado con exito");
@@ -64,8 +63,7 @@ async fn save_new_command(command_data: String) -> Result<String, ()> {
 
 #[tauri::command]
 async fn edit_command(command_id: u16, command_data: String) -> Result<String, ()> {
-    let response: Result<String, ()> =
-        file_controller::edit_command(command_id, command_data).await;
+    let response: Result<String, ()> = db_controller::edit_command(command_id, command_data).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Comando guardado con exito");
@@ -77,7 +75,7 @@ async fn edit_command(command_id: u16, command_data: String) -> Result<String, (
 
 #[tauri::command]
 async fn delete_command(command_id: u16) -> Result<String, ()> {
-    let response: Result<String, ()> = file_controller::delete_command(command_id).await;
+    let response: Result<String, ()> = db_controller::delete_command(command_id).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Comando guardado con exito");
@@ -89,17 +87,7 @@ async fn delete_command(command_id: u16) -> Result<String, ()> {
 
 #[tauri::command]
 async fn start_data_config(app: AppHandle) -> Result<String, ()> {
-    tokio::spawn(vtubestudio::get_token_vtubestudio(app.clone()));
-    let paths = fs::read_dir("/dev/input/").unwrap();
-    for path in paths {
-        let path_check = path.unwrap();
-        let _path_dir = path_check.file_name().display().to_string();
-        if !path_check.file_type().unwrap().is_dir() {
-            // tokio::spawn(start_check_hotkeys(path_dir));
-        }
-    }
-
-    let _res: String = file_controller::load_config_token()
+    let _res: String = db_controller::load_config_token()
         .await
         .unwrap_or(String::from("Error"));
     let data_config: String = std::env::var("configLoaded")
@@ -109,7 +97,7 @@ async fn start_data_config(app: AppHandle) -> Result<String, ()> {
     if data_config == "S" {
         let data_test: String = std::env::var("tokenBot").unwrap_or(String::from(""));
         if data_test != "" {
-            tokio::spawn(file_controller::check_tokens(app.clone()));
+            tokio::spawn(db_controller::check_tokens(app.clone()));
             response = String::from("LOADED");
             let points_started: String = std::env::var("points_started")
                 .ok()
@@ -128,68 +116,8 @@ async fn start_data_config(app: AppHandle) -> Result<String, ()> {
 }
 #[tauri::command]
 async fn get_data_commands() -> Result<String, ()> {
-    let res: String = file_controller::get_commands_string().await.unwrap();
+    let res: String = db_controller::get_commands_string().await.unwrap();
     Ok(res)
-}
-
-async fn _start_check_hotkeys(path: String) {
-    let device_test = Device::open(format!("/dev/input/{}", path));
-    if device_test.is_ok() {
-        let mut device = device_test.unwrap();
-        let supported_keys: &AttributeSetRef<KeyCode> = device.supported_keys().unwrap();
-        let keys: Vec<KeyCode> = supported_keys.iter().collect();
-        let is_keyboard: Vec<&KeyCode> = keys
-            .iter()
-            .filter(|x| x.code() == KeyCode::KEY_A.code())
-            .collect();
-        //println!("{props}");
-        if is_keyboard.len() > 0 {
-            let mut keys_pressed: Vec<KeyCode> = vec![];
-            loop {
-                for event in device.fetch_events().unwrap() {
-                    match event.destructure() {
-                        EventSummary::Key(_ev, key_type, 1) => {
-                            //println!("Key {:?} was pressed, got event: {:?}", key_type, ev);
-                            keys_pressed.push(key_type);
-                            let mut keys_pressed_vect_string: Vec<String> = vec![];
-                            for k in keys_pressed.clone() {
-                                let key = format!("{:?}", k);
-                                let key_string: String = key.replace("KEY_", "");
-                                keys_pressed_vect_string.push(key_string);
-                            }
-                            let keys_pressed_string = keys_pressed_vect_string.join(" + ");
-                            println!("Teclas pulsadas {:?}", keys_pressed_string);
-                        }
-                        EventSummary::Key(_ev, key_type, 0) => {
-                            //println!("Key {:?} was released", key_type);
-                            let index: Option<usize> = keys_pressed
-                                .iter()
-                                .position(|r: &KeyCode| r.code() == key_type.code());
-                            if index.is_some() {
-                                keys_pressed.remove(index.unwrap());
-                            }
-                            //   let keys_pressed_string:Iterator<KeyCode> = keys_pressed.iter().map(|f| f);
-
-                            let mut keys_pressed_vect_string: Vec<String> = vec![];
-                            for k in keys_pressed.clone() {
-                                let key = format!("{:?}", k);
-                                let key_string: String = key.replace("KEY_", "");
-                                keys_pressed_vect_string.push(key_string);
-                            }
-                            let keys_pressed_string = keys_pressed_vect_string.join(" + ");
-                            println!("Teclas pulsadas {:?}", keys_pressed_string);
-                            //let _test = format!("{:?}",keys_pressed);
-                            //println!("Keys pressed {:?} was released", ev);
-                        }
-                        EventSummary::AbsoluteAxis(_, axis, value) => {
-                            println!("The Axis {:?} was moved to {}", axis, value);
-                        }
-                        _ => print!(""),
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[tauri::command]
@@ -199,7 +127,7 @@ async fn implement_suscribers(session_id: &str, app: AppHandle) -> Result<String
     if response.is_ok() {
         let response_processed: StatusCode = response.unwrap();
         if response_processed.is_client_error() {
-            tokio::spawn(file_controller::check_tokens(app));
+            tokio::spawn(db_controller::check_tokens(app));
             Ok(format!("Error al iniciar el suscriber"))
         } else {
             Ok(format!(
@@ -226,12 +154,12 @@ async fn execute_command_message(event_string: &str) -> Result<String, ()> {
         let message_split: Vec<&str> = message_text_command.split(' ').collect();
         let command_trigger: String = message_split[0].replace("!", "");
         let user_bot_container: Vec<PointUserTwitchStruct> =
-            file_controller::get_points_user(event_ok.chatter_user_id)
+            db_controller::get_points_user(event_ok.chatter_user_id)
                 .await
                 .unwrap();
         let user_bot = user_bot_container.get(0).unwrap();
 
-        let command: CommandStruct = file_controller::get_command_by_trigger(command_trigger)
+        let command: CommandStruct = db_controller::get_command_by_trigger(command_trigger)
             .await
             .unwrap_or(CommandStruct::default());
         if user_bot.points >= command.point_cost {
@@ -240,7 +168,7 @@ async fn execute_command_message(event_string: &str) -> Result<String, ()> {
                     .await
                     .unwrap();
             let actual_points = user_bot.points - command.point_cost;
-            file_controller::save_points_user(user_bot.user_id.clone(), actual_points).await;
+            db_controller::save_points_user(user_bot.user_id.clone(), actual_points).await;
             Ok(_res)
         } else {
             Ok(String::from(
@@ -261,7 +189,7 @@ async fn execute_command_redeem(event_string: &str) -> Result<String, ()> {
     } else {
         let event_ok: RedeemTwitchEvent = event.unwrap();
         let command_trigger: String = event_ok.reward.title;
-        let command: CommandStruct = file_controller::get_command_by_redeem_title(command_trigger)
+        let command: CommandStruct = db_controller::get_command_by_redeem_title(command_trigger)
             .await
             .unwrap_or(CommandStruct::default());
         let _res: String = command_twitch::execute_command(command, &event_ok.user_input.as_str())
@@ -278,23 +206,23 @@ async fn get_url_token(token_type: String, app: AppHandle) -> Result<String, ()>
 }
 
 #[tauri::command]
-async fn actions_vtubestudio(
-    action: VTUBESTUDIO_ACTIONS,
-    param: String,
-    app: AppHandle,
-) -> Result<String, ()> {
+async fn actions_vtubestudio(action: VTUBESTUDIO_ACTIONS, param: String) -> Result<String, ()> {
     let mut response = String::from("");
 
     match action {
         VTUBESTUDIO_ACTIONS::GET_MODELS => {
             let message: String = consts::vtubestudio_get_models();
-            response = vtubestudio::send_websocket_vtubestudio(message, app.clone())
-                .await
-                .unwrap_or(String::from("Error"));
+            let response_raw: Result<String, tokio_tungstenite::tungstenite::Error> =
+                vtubestudio::send_websocket_vtubestudio(message).await;
+
+            if response_raw.is_ok() {
+                let response_string: String = response_raw.unwrap();
+                response = vtubestudio::save_models(response_string).await.unwrap();
+            }
         }
         VTUBESTUDIO_ACTIONS::SET_MODEL => {
             let message: String = consts::vtubestudio_set_model(param);
-            response = vtubestudio::send_websocket_vtubestudio(message, app.clone())
+            response = vtubestudio::send_websocket_vtubestudio(message)
                 .await
                 .unwrap_or(String::from("Error"));
         }
@@ -303,6 +231,16 @@ async fn actions_vtubestudio(
     Ok(response)
 }
 
+#[tauri::command]
+async fn start_config_vtubestudio(app: AppHandle) {
+    let _res = vtubestudio::get_token_vtubestudio(app).await;
+}
+
+#[tauri::command]
+async fn action_new_shorcut(){
+    println!("Inicio Invoke");
+    std::env::set_var("ListenForNewShorcut", "S");
+}
 
 
 async fn get_auth_token(token_type: String, app: AppHandle) {
@@ -329,8 +267,7 @@ async fn get_auth_token(token_type: String, app: AppHandle) {
                         let token: &str = param_split.get(1).unwrap();
                         let response = "HTTP/1.1 200 OK\r\nContent-Length: 48\r\nContent-Type: text/html\r\n\r\n<h1>Token Updated, you can close the window</h1>";
                         stream.write(response.as_bytes()).unwrap();
-                        let res =
-                            file_controller::save_token_auth(token, token_type.as_str()).await;
+                        let res = db_controller::save_token_auth(token, token_type.as_str()).await;
                         if res.is_ok() {
                             app.emit("token-updated", token_type.clone()).unwrap();
                         }
@@ -355,10 +292,6 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
-            app.manage(Mutex::new(AppRunnigConfig::default()));
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             get_bot_id,
             implement_suscribers,
@@ -371,7 +304,9 @@ pub fn run() {
             execute_command_message,
             get_url_token,
             actions_vtubestudio,
-            execute_command_redeem
+            execute_command_redeem,
+            start_config_vtubestudio,
+            action_new_shorcut
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

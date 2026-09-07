@@ -12,6 +12,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { ChatMessage, Command, CommandUses, COOLDOWN_TYPE, messageEvent, PayloadViewers, redeemEvent } from "./custom-types/types.td";
 import MenuIntegration from "./components/integrations/MenuIntegrations";
 import ConfigMenu from "./components/configMenu/ConfigMenu";
+import { IntegrationStartedList } from "./components/integrations/types.td";
 
 let didInit = false;
 let socketStarted = false;
@@ -34,6 +35,7 @@ function App() {
   const [suscribersStarted, setSuscribersStarted] = useState(false);
   const [dataLoaded, setDataLoaded] = useState<any>(undefined);
   const [currentMenu, setCurrentMenu] = useState(MENU_ACTUAL.CHAT);
+  const [integrationsStarted, SetIntegrationsStarted] = useState<IntegrationStartedList>({ VtubeStudio: false });
   const [messages, setMessages] = useState<Array<ChatMessage>>([]);
   const commands = useRef<Array<Command>>([])
   const [forceUpdate, setForceUpdate] = useState<boolean>(true);
@@ -42,6 +44,22 @@ function App() {
   const botIdChat = useRef("")
   const viewers = useRef<Array<PayloadViewers>>([])
 
+  listen<string>('integration-started', (event) => {
+    console.log("test");
+    let integration_started = event.payload;
+    let integrations = integrationsStarted;
+    switch (integration_started) {
+      case "VtubeStudio":
+        integrations.VtubeStudio = true;
+        break;
+
+      default:
+        break;
+    }
+    SetIntegrationsStarted(integrations);
+    setForceUpdate(!forceUpdate);
+
+  });
 
   listen<string>('refresh-viewers', (event) => {
     let viewers_parse = JSON.parse(event.payload);
@@ -308,6 +326,7 @@ function App() {
         ></CommandList>)
       case MENU_ACTUAL.INTEGRACIONES:
         return (<MenuIntegration
+          integrationsStarted={integrationsStarted}
         ></MenuIntegration>)
       case MENU_ACTUAL.CONFIG:
         return (<ConfigMenu

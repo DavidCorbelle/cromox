@@ -6,7 +6,7 @@ pub fn get_migrations() -> Vec<Migration>{
         Migration {
             version: 1,
             description: "create_initial_tables",
-            sql: "CREATE TABLE users_twitch (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), points BIGINT, time_watch_mins BIGINT);",
+            sql: "CREATE TABLE users_twitch ( id VARCHAR(255) UNIQUE, name VARCHAR(255), points BIGINT, time_watch_mins BIGINT, PRIMARY KEY(id));",
             kind: MigrationKind::Up,
         },
         Migration {
@@ -26,6 +26,12 @@ pub fn get_migrations() -> Vec<Migration>{
             description: "add_redeem_points_name",
             sql:"ALTER TABLE commands_twitch ADD redeem_points_name TEXT",
             kind:MigrationKind::Up
+        },
+        Migration {
+            version: 5,
+            description: "add_table_integrations_config add_table_vtubestudio_values",
+            sql:"CREATE TABLE integrations ( app TEXT NOT NULL UNIQUE, token TEXT, active INTEGER, config TEXT, PRIMARY KEY(app)); CREATE TABLE VTubeStudio_models ( model_id TEXT UNIQUE,model_name TEXT, model_shortcut TEXT, PRIMARY KEY(model_id));",
+            kind: MigrationKind::Up
         }
     ];   
     return migrations;

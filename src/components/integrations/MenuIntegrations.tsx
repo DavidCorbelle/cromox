@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { MENU_INTEGRACIONES } from "../../consts";
-import IntegrationVtubestudio from "./IntegrationVtubestudio";
+import IntegrationVtubestudio from "./VTubeStudio/IntegrationVtubestudio";
+import { MenuIntegrationProps } from "./types.td";
 
 
-const MenuIntegration = ({ }) => {
+const MenuIntegration = ({ integrationsStarted }: MenuIntegrationProps) => {
     const [statusMenu, SetStatusMenu] = useState<number>(0);
 
     function renderMenuIntegracion() {
         switch (statusMenu) {
             case MENU_INTEGRACIONES.VTUBESTUDIO:
-                return (<IntegrationVtubestudio></IntegrationVtubestudio>)
+                return (<IntegrationVtubestudio integrationStarted={integrationsStarted.VtubeStudio}></IntegrationVtubestudio>)
                 break;
 
             default:

@@ -92,6 +92,7 @@ pub async fn get_chatters_twitch() -> Response {
     let bot_id: String = std::env::var("bot_id").unwrap();
     let url: String = format!("https://api.twitch.tv/helix/chat/chatters?broadcaster_id={broadcaster_id}&moderator_id={bot_id}&first=1000");
     let headers: HeaderMap = get_auth_headers(BOT_TOKEN_TYPE);
+    println!("{:?}",headers);
     let response: Response = client.get(url).headers(headers).send().await.unwrap();
     return response;
 }
