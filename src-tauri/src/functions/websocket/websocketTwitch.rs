@@ -3,8 +3,9 @@ use tauri::http::HeaderMap;
 
 use crate::{
     consts::SUSCRIBERS_TWITCH,
-    secret_const::{BOT_TOKEN_TYPE, CLIENT_ID, STREAMER_TOKEN_TYPE},
+    secret_const::{ CLIENT_ID},
     structs_custom, structs_twitch_api,
+    consts::{BOT_TOKEN_TYPE, STREAMER_TOKEN_TYPE}
 };
 
 fn get_auth_headers(type_token: &str) -> HeaderMap {
@@ -53,7 +54,6 @@ pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwes
             .await?;
         
         status = response.status();
-        println!("{}", &response.text().await.unwrap());
         if status.is_client_error(){
             break;
         }
@@ -92,7 +92,6 @@ pub async fn get_chatters_twitch() -> Response {
     let bot_id: String = std::env::var("bot_id").unwrap();
     let url: String = format!("https://api.twitch.tv/helix/chat/chatters?broadcaster_id={broadcaster_id}&moderator_id={bot_id}&first=1000");
     let headers: HeaderMap = get_auth_headers(BOT_TOKEN_TYPE);
-    println!("{:?}",headers);
     let response: Response = client.get(url).headers(headers).send().await.unwrap();
     return response;
 }

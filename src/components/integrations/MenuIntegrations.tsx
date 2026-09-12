@@ -12,7 +12,6 @@ const MenuIntegration = ({ integrationsStarted }: MenuIntegrationProps) => {
             case MENU_INTEGRACIONES.VTUBESTUDIO:
                 return (<IntegrationVtubestudio integrationStarted={integrationsStarted.VtubeStudio}></IntegrationVtubestudio>)
                 break;
-
             default:
                 return (<></>)
                 break;

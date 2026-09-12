@@ -1,7 +1,9 @@
-use std::fs;
+use std::{fs};
 
 use evdev::{AttributeSetRef, Device, EventSummary, KeyCode};
 use tauri::{AppHandle, Emitter};
+
+use crate::db_controller;
 
 pub async fn start_check_hotkeys(app: AppHandle) {
     let paths = fs::read_dir("/dev/input/").unwrap();
@@ -30,7 +32,6 @@ async fn key_listener(path: String, app: AppHandle) {
                 for event in device.fetch_events().unwrap() {
                     match event.destructure() {
                         EventSummary::Key(_ev, key_type, 1) => {
-                            //println!("Key {:?} was pressed, got event: {:?}", key_type, ev);
                             keys_pressed.push(key_type);
                             let mut keys_pressed_vect_string: Vec<String> = vec![];
                             for k in keys_pressed.clone() {
@@ -38,8 +39,10 @@ async fn key_listener(path: String, app: AppHandle) {
                                 let key_string: String = key.replace("KEY_", "");
                                 keys_pressed_vect_string.push(key_string);
                             }
+                            keys_pressed_vect_string.sort();
+                            keys_pressed_vect_string.sort_by(|a,b| b.len().cmp(&a.len()));
                             let keys_pressed_string = keys_pressed_vect_string.join(" + ");
-                            println!("Teclas pulsadas {:?}", keys_pressed_string);
+                            let _r = db_controller::check_shorcut_and_use(keys_pressed_string).await;
                         }
                         EventSummary::Key(_ev, key_type, 0) => {
                             let emit =
@@ -51,6 +54,8 @@ async fn key_listener(path: String, app: AppHandle) {
                                     let key_string: String = key.replace("KEY_", "");
                                     keys_resp_vect.push(key_string);
                                 }
+                                keys_resp_vect.sort();
+                                keys_resp_vect.sort_by(|a,b| b.len().cmp(&a.len()));
                                 let resp = keys_resp_vect.join(" + ");
                                 let _r = app.emit("hotkey-pressed", resp);
                                 std::env::set_var("ListenForNewShorcut", "N");
@@ -68,11 +73,9 @@ async fn key_listener(path: String, app: AppHandle) {
                                 let key_string: String = key.replace("KEY_", "");
                                 keys_pressed_vect_string.push(key_string);
                             }
-                            let keys_pressed_string = keys_pressed_vect_string.join(" + ");
-                            println!("Teclas pulsadas {:?}", keys_pressed_string);
                         }
-                        EventSummary::AbsoluteAxis(_, axis, value) => {
-                            println!("The Axis {:?} was moved to {}", axis, value);
+                        EventSummary::AbsoluteAxis(_, _, _) => {
+
                         }
                         _ => print!(""),
                     }

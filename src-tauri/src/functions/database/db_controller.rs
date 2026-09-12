@@ -1,9 +1,17 @@
 use crate::{
-    consts,
-    secret_const::{self, BOT_TOKEN_TYPE, CLIENT_ID, CLIENT_SECRET, STREAMER_TOKEN_TYPE},
+    consts::{
+        get_access_token_url, vtubestudio_set_expression_current_model, vtubestudio_set_model,
+        BOT_TOKEN_TYPE, STREAMER_TOKEN_TYPE, TABLE_VTUVESTUDIO_EXPRESSIONS,
+        TABLE_VTUVESTUDIO_MODELS,
+    },
+    secret_const::{self, CLIENT_ID, CLIENT_SECRET},
     structs_custom::{self, CommandStruct, PointUserTwitchStruct},
     structs_twitch_api,
-    structs_vtubestudio::ModelDataVtubestudio,
+    structs_vtubestudio::{
+        DataShorcutFront, ExpressionslDataFront, ModelDataFront, ModelDataVtubestudio,
+        VtubestudioApiExpression, VTUBE_STUDIO_CONFIG,
+    },
+    vtubestudio::send_websocket_vtubestudio,
     websocket_twitch,
 };
 use reqwest::{Client, Response};
@@ -206,7 +214,6 @@ pub async fn save_new_command(data: String) -> Result<String, ()> {
 }
 
 pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
-    println!("Edit");
     let new_command: structs_custom::CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
     let con: SqlitePool = get_connection().await.unwrap();
     let new_command_content_type: String =
@@ -234,7 +241,6 @@ pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
     .execute(&con)
     .await
     .unwrap();
-    println!("Rows Affected{}", _result.rows_affected());
     Ok(String::from("Ok"))
 }
 
@@ -407,7 +413,7 @@ pub async fn save_token_auth(token: &str, type_token: &str) -> Result<String, St
 }
 
 async fn get_access_token(refresh_token: &str) -> Result<String, ()> {
-    let url: String = consts::get_access_token_url();
+    let url: String = get_access_token_url();
     let client = reqwest::Client::new();
     let mut params = HashMap::new();
     params.insert("client_id", CLIENT_ID);
@@ -457,6 +463,111 @@ pub async fn get_token_integration(integration_name: &str) -> Result<String, ()>
     }
 }
 
+//SHORCUTS
+pub async fn save_shorcut_multiple(data: Vec<DataShorcutFront>, table: &str) {
+    let con: SqlitePool = get_connection().await.unwrap();
+    for d in data {
+        let shortcut = d.shortcut.unwrap();
+        let mut parent = d.parent_id.unwrap_or_default();
+        if parent == String::from("") {
+            parent = Default::default();
+        }
+        if shortcut != String::from("") {
+            let select = sqlx::query(
+                "SELECT shorcut FROM  shorcuts  WHERE id_item = $1 AND table_name = $2 AND parent_id=$3",
+            )
+            .bind(d.id_item.clone())
+            .bind(table)
+            .bind(parent.clone())
+            .fetch_all(&con)
+            .await
+            .unwrap();
+            if select.len() > 0 {
+                let _result: SqliteQueryResult = sqlx::query(
+                    "UPDATE shorcuts SET shorcut = $3 WHERE id_item = $1 AND table_name =$2 AND parent_id=$4",
+                )
+                .bind(d.id_item)
+                .bind(table)
+                .bind(shortcut)
+                .bind(parent)
+                .execute(&con)
+                .await
+                .unwrap();
+            } else {
+                let _result: SqliteQueryResult = sqlx::query(
+                    "INSERT INTO shorcuts (id_item, table_name, shorcut, parent_id) VALUES ($1, $2, $3, $4)",
+                )
+                .bind(d.id_item)
+                .bind(table)
+                .bind(shortcut)
+                .bind(parent)
+                .execute(&con)
+                .await
+                .unwrap();
+            }
+        } else {
+            let _result: SqliteQueryResult = sqlx::query(
+                "DELETE FROM shorcuts WHERE id_item=$1 AND table_name =$2  AND parent_id=$3",
+            )
+            .bind(d.id_item)
+            .bind(table)
+            .bind(parent)
+            .execute(&con)
+            .await
+            .unwrap();
+        }
+    }
+}
+
+pub async fn check_shorcut_and_use(string_shorcut: String) {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let select = sqlx::query("SELECT * FROM  shorcuts  WHERE shorcut = $1")
+        .bind(string_shorcut)
+        .fetch_all(&con)
+        .await
+        .unwrap();
+    if select.len() > 0 {
+        for s in select {
+            let shorcut: String = s.get("shorcut");
+            let table_name: String = s.get("table_name");
+            if table_name == TABLE_VTUVESTUDIO_MODELS {
+                let model: String = s.get("id_item");
+                let message = vtubestudio_set_model(model);
+                let _r = send_websocket_vtubestudio(message).await;
+            }
+            if table_name == TABLE_VTUVESTUDIO_EXPRESSIONS {
+                println!("Entra");
+                let expression: String = s.get("id_item");
+                let message = vtubestudio_set_expression_current_model(expression);
+                println!("Entra: {}", message.clone());
+                let _r = send_websocket_vtubestudio(message).await;
+            }
+            println!("Existe shorcut {}", shorcut);
+        }
+    }
+}
+
+// VTUBE_STUDIO
+pub async fn get_all_models_vtubestudio() -> Result<Vec<ModelDataFront>, ()> {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let mut models = vec![];
+    let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
+        sqlx::query("SELECT VTubeStudio_models.model_id as model_id, VTubeStudio_models.model_name as model_name, shorcuts.shorcut as shorcut FROM VTubeStudio_models LEFT JOIN shorcuts ON VTubeStudio_models.model_id = shorcuts.id_item")
+            .fetch_all(&con)
+            .await;
+    if result.is_ok() {
+        let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
+        for i in result_query {
+            models.push(ModelDataFront {
+                model_name: i.get("model_name"),
+                model_id: i.get("model_id"),
+                shortcut: i.get("shorcut"),
+            });
+        }
+    }
+    Ok(models)
+}
+
 pub async fn save_model_vtubestudio_api(model: ModelDataVtubestudio) {
     let con: SqlitePool = get_connection().await.unwrap();
     let _result: SqliteQueryResult = sqlx::query(
@@ -469,22 +580,60 @@ pub async fn save_model_vtubestudio_api(model: ModelDataVtubestudio) {
     .unwrap();
 }
 
-pub async fn get_all_models_vtubestudio() -> Result<Vec<structs_custom::ModelDataFront>,()> {
+pub async fn save_expressions_vtubestudio_api(
+    expression: VtubestudioApiExpression,
+    model_id: String,
+) {
     let con: SqlitePool = get_connection().await.unwrap();
-    let mut  models = vec![];
+    let select = sqlx::query(
+        "SELECT * FROM  VTubeStudio_expressions  WHERE expression_file = $1 AND  model_id = $2",
+    )
+    .bind(expression.file.clone())
+    .bind(model_id.clone())
+    .fetch_all(&con)
+    .await
+    .unwrap();
+    if select.len() > 0 {
+    } else {
+        let _result: SqliteQueryResult = sqlx::query(
+        "INSERT INTO VTubeStudio_expressions (expression_name, expression_file, model_id) VALUES ($1, $2, $3);",
+    )
+    .bind(expression.name)
+    .bind(expression.file)
+    .bind(model_id)
+    .execute(&con)
+    .await
+    .unwrap();
+    }
+}
+
+pub async fn get_all_expressions_vtubestudio() -> Result<Vec<ExpressionslDataFront>, ()> {
+    let con: SqlitePool = get_connection().await.unwrap();
+    let mut expressions = vec![];
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
-        sqlx::query("SELECT * FROM VTubeStudio_models")
+        sqlx::query("SELECT VTubeStudio_expressions.model_id as model_id, VTubeStudio_expressions.expression_name as expression_name, VTubeStudio_expressions.expression_file as expression_file, shorcuts.shorcut as shorcut FROM VTubeStudio_expressions LEFT JOIN shorcuts ON VTubeStudio_expressions.model_id = shorcuts.parent_id AND VTubeStudio_expressions.expression_file = shorcuts.id_item")
             .fetch_all(&con)
             .await;
     if result.is_ok() {
+        println!("Hay Resultados");
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
         for i in result_query {
-            models.push(structs_custom::ModelDataFront {
-                model_name: i.get("model_name"),
+            expressions.push(ExpressionslDataFront {
+                expression_name: i.get("expression_name"),
+                expression_file: i.get("expression_file"),
                 model_id: i.get("model_id"),
-                model_shortcut: i.get("model_shortcut")
+                shortcut: i.get("shorcut"),
             });
         }
     }
-    Ok(models)
+    Ok(expressions)
+}
+
+pub async fn get_vtubestudio_config() -> Result<String, ()> {
+    let models_data = get_all_models_vtubestudio().await.unwrap();
+    let data: VTUBE_STUDIO_CONFIG = VTUBE_STUDIO_CONFIG {
+        models_data: models_data,
+    };
+    let data_string = serde_json::to_string(&data).unwrap();
+    Ok(data_string)
 }

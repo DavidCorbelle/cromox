@@ -12,7 +12,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { ChatMessage, Command, CommandUses, COOLDOWN_TYPE, messageEvent, PayloadViewers, redeemEvent } from "./custom-types/types.td";
 import MenuIntegration from "./components/integrations/MenuIntegrations";
 import ConfigMenu from "./components/configMenu/ConfigMenu";
-import { IntegrationStartedList } from "./components/integrations/types.td";
+import { AvataresVTubeStudio, IntegrationStartedList } from "./components/integrations/types.td";
 
 let didInit = false;
 let socketStarted = false;
@@ -45,9 +45,8 @@ function App() {
   const viewers = useRef<Array<PayloadViewers>>([])
 
   listen<string>('integration-started', (event) => {
-    console.log("test");
     let integration_started = event.payload;
-    let integrations = integrationsStarted;
+    let integrations = {...integrationsStarted};
     switch (integration_started) {
       case "VtubeStudio":
         integrations.VtubeStudio = true;
@@ -242,7 +241,7 @@ function App() {
       response_text: data.get("response_text") as string,
       sound: {
         sound_dir: data.get("sound_dir") as string,
-        sound_volume: isNaN(Number.parseInt(data.get("sound_volume") as string)) ? 100 : Number.parseInt(data.get("sound_volume") as string) * 100,
+        sound_volume: isNaN(Number.parseInt(data.get("sound_volume") as string)) ? 100 : Number.parseInt(data.get("sound_volume") as string),
       },
       permits: {
         content_type: data.get("permits") as string,
@@ -279,6 +278,8 @@ function App() {
     });
     commands.current = tmpCommands;
   }
+
+
 
   function delete_command(commandId: Number) {
     invoke('delete_command', { commandId }).then(() => { update_commands() })
@@ -335,11 +336,6 @@ function App() {
         break;
     }
   }
-  function invokeTest() {
-    let action = "SET_MODEL";
-    let param = "05b6f827e83845e39ab174dbe455bddc";
-    invoke('actions_vtubestudio', { action, param });
-  }
 
   return (
     <main className="container">
@@ -366,8 +362,6 @@ function App() {
       <div>
         {renderCurrentView()}
       </div>
-
-      <button onClick={() => { invokeTest() }}>TEST</button>
     </main>
   );
 }

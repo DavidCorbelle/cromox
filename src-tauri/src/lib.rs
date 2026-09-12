@@ -1,7 +1,8 @@
+use crate::consts::{TABLE_VTUVESTUDIO_EXPRESSIONS, TABLE_VTUVESTUDIO_MODELS};
 // Made by David Corbelle García
-use crate::structs_custom::{ CommandStruct, PointUserTwitchStruct};
+use crate::structs_custom::{CommandStruct, PointUserTwitchStruct};
 use crate::structs_twitch_api::{MessageTwitchEvent, RedeemTwitchEvent};
-use crate::structs_vtubestudio::VTUBESTUDIO_ACTIONS;
+use crate::structs_vtubestudio::{DataShorcutFront, VTUBESTUDIO_ACTIONS};
 use reqwest::{self, Error, Response, StatusCode};
 use std::env;
 use std::io::{Read, Write};
@@ -142,12 +143,9 @@ async fn implement_suscribers(session_id: &str, app: AppHandle) -> Result<String
 
 #[tauri::command]
 async fn execute_command_message(event_string: &str) -> Result<String, ()> {
-    println!("{}", event_string);
     let event = serde_json::from_str(event_string);
     if event.is_err() {
-        let error = event.unwrap_err();
-        println!("{}", error.to_string());
-        Ok(String::from("event"))
+        Ok(String::from("Error"))
     } else {
         let event_ok: MessageTwitchEvent = event.unwrap();
         let message_text_command = event_ok.message.text;
@@ -180,12 +178,9 @@ async fn execute_command_message(event_string: &str) -> Result<String, ()> {
 
 #[tauri::command]
 async fn execute_command_redeem(event_string: &str) -> Result<String, ()> {
-    println!("{}", event_string);
     let event = serde_json::from_str(event_string);
     if event.is_err() {
-        let error = event.unwrap_err();
-        println!("{}", error.to_string());
-        Ok(String::from("event"))
+        Ok(String::from("Error"))
     } else {
         let event_ok: RedeemTwitchEvent = event.unwrap();
         let command_trigger: String = event_ok.reward.title;
@@ -205,31 +200,6 @@ async fn get_url_token(token_type: String, app: AppHandle) -> Result<String, ()>
     Ok(secret_const::get_token_url(token_type))
 }
 
-#[tauri::command]
-async fn actions_vtubestudio(action: VTUBESTUDIO_ACTIONS, param: String) -> Result<String, ()> {
-    let mut response = String::from("");
-
-    match action {
-        VTUBESTUDIO_ACTIONS::GET_MODELS => {
-            let message: String = consts::vtubestudio_get_models();
-            let response_raw: Result<String, tokio_tungstenite::tungstenite::Error> =
-                vtubestudio::send_websocket_vtubestudio(message).await;
-
-            if response_raw.is_ok() {
-                let response_string: String = response_raw.unwrap();
-                response = vtubestudio::save_models(response_string).await.unwrap();
-            }
-        }
-        VTUBESTUDIO_ACTIONS::SET_MODEL => {
-            let message: String = consts::vtubestudio_set_model(param);
-            response = vtubestudio::send_websocket_vtubestudio(message)
-                .await
-                .unwrap_or(String::from("Error"));
-        }
-        _ => {}
-    }
-    Ok(response)
-}
 
 #[tauri::command]
 async fn start_config_vtubestudio(app: AppHandle) {
@@ -237,11 +207,9 @@ async fn start_config_vtubestudio(app: AppHandle) {
 }
 
 #[tauri::command]
-async fn action_new_shorcut(){
-    println!("Inicio Invoke");
+async fn action_new_shorcut() {
     std::env::set_var("ListenForNewShorcut", "S");
 }
-
 
 async fn get_auth_token(token_type: String, app: AppHandle) {
     let listener = TcpListener::bind(("127.0.0.1", 8080));
@@ -278,7 +246,75 @@ async fn get_auth_token(token_type: String, app: AppHandle) {
         }
     }
 }
+//VTUBESTUDIO
+#[tauri::command]
+async fn vtubestudio_save_shorcuts_models(data_send: String) {
+    let data_shorcut: Vec<DataShorcutFront> = serde_json::from_str(&data_send).unwrap();
+    tokio::spawn(db_controller::save_shorcut_multiple(
+        data_shorcut,
+        TABLE_VTUVESTUDIO_MODELS,
+    ));
+}
+#[tauri::command]
+async fn vtubestudio_save_shorcuts_expressions(data_send: String) {
+    let data_shorcut: Vec<DataShorcutFront> = serde_json::from_str(&data_send).unwrap();
+    tokio::spawn(db_controller::save_shorcut_multiple(
+        data_shorcut,
+        TABLE_VTUVESTUDIO_EXPRESSIONS,
+    ));
+}
 
+#[tauri::command]
+async fn get_config_vtubestudio() -> Result<String, String> {
+    let config_vtubestudio = db_controller::get_vtubestudio_config().await;
+    if config_vtubestudio.is_ok() {
+        let res:String = config_vtubestudio.unwrap();
+        Ok(res)
+    } else {
+        Err(String::from(
+            "{\"Error\":\"No se ha podido cargar la configuracion\"}",
+        ))
+    }
+}
+
+#[tauri::command]
+async fn actions_vtubestudio(action: VTUBESTUDIO_ACTIONS, param: String) -> Result<String, ()> {
+    let mut response = String::from("");
+
+    match action {
+        VTUBESTUDIO_ACTIONS::GET_MODELS => {
+            let message: String = consts::vtubestudio_get_models();
+            let response_raw: Result<String, tokio_tungstenite::tungstenite::Error> =
+                vtubestudio::send_websocket_vtubestudio(message).await;
+
+            if response_raw.is_ok() {
+                let response_string: String = response_raw.unwrap();
+                response = vtubestudio::save_models(response_string).await.unwrap();
+            }
+        }
+        VTUBESTUDIO_ACTIONS::SET_MODEL => {
+            let message: String = consts::vtubestudio_set_model(param);
+            response = vtubestudio::send_websocket_vtubestudio(message)
+                .await
+                .unwrap_or(String::from("Error"));
+        }
+        VTUBESTUDIO_ACTIONS::GET_EXPRESSIONS_MODEL => {
+            let message: String = consts::vtubestudio_get_expressions_current_model();
+            let response_raw = vtubestudio::send_websocket_vtubestudio(message)
+                .await;
+             if response_raw.is_ok() {
+                let response_string: String = response_raw.unwrap();
+                response = vtubestudio::save_expresions(response_string).await.unwrap();
+            }
+        
+        }
+        _ => {}
+    }
+    Ok(response)
+}
+
+
+//INIT
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env::set_var("RUST_BACKTRACE", "1");
@@ -306,7 +342,10 @@ pub fn run() {
             actions_vtubestudio,
             execute_command_redeem,
             start_config_vtubestudio,
-            action_new_shorcut
+            action_new_shorcut,
+            vtubestudio_save_shorcuts_models,
+            vtubestudio_save_shorcuts_expressions,
+            get_config_vtubestudio
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

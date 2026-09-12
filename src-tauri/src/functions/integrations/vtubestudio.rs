@@ -4,10 +4,7 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::{
-    consts::{self},
-    db_controller,
-    intg_linux::start_check_hotkeys,
-    structs_vtubestudio::{AuthResponseVtubestudio, GetDataVtubestudio},
+    consts::{self}, db_controller, intg_linux::start_check_hotkeys, structs_vtubestudio::{AuthResponseVtubestudio, ExpressionslDataFront, GetDataVtubestudio, ModelDataFront},
 };
 
 const INTEGRATION_NAME: &'static str = "VtubeStudio";
@@ -26,7 +23,6 @@ pub async fn get_token_vtubestudio(app: AppHandle) {
                 print!("existe");
                 if msg_response.is_some() {
                     let msg = msg_response.unwrap().unwrap();
-                    println!("received: {msg}");
                     let data: AuthResponseVtubestudio =
                         serde_json::from_str(&msg.to_string()).unwrap();
                     let token_string = data.data.authenticationToken.clone();
@@ -35,7 +31,6 @@ pub async fn get_token_vtubestudio(app: AppHandle) {
                     let _r = app.emit("integration-started", INTEGRATION_NAME);
                     tokio::spawn(start_check_hotkeys(app.clone()));
                 }
-                //TODO: quitar esta llamada ya que es de prueba solo para probar el token con otra funcion
             }
             Err(e) => println!("connect failed: {e}"),
         }
@@ -57,22 +52,19 @@ pub async fn send_websocket_vtubestudio(
         Ok((mut ws, _)) => {
             let _a = ws.send(Message::text(string_message)).await;
 
-            let msg_response = ws.next().await;
-            if msg_response.is_some() {
-                let msg = msg_response.unwrap().unwrap();
-                println!("received: {msg}");
-            }
+            let _msg_response = ws.next().await;
             let _b = ws.send(Message::text(message)).await;
             let msg_response = ws.next().await;
             if msg_response.is_some() {
+                println!("responde");
                 let msg = msg_response.unwrap().unwrap();
-                println!("{msg}");
+                println!("{:?}",msg.clone());
                 Ok(msg.to_string())
             } else {
                 Ok(String::from("Respuesta Vacia"))
             }
         }
-        Err(e) => Err(e),
+        Err(_e) => Ok(String::from("Respuesta Vacia")),
     }
 }
 
@@ -85,10 +77,34 @@ pub async fn save_models(data_string: String) -> Result<String, ()> {
             for m in models {
                 let _r = db_controller::save_model_vtubestudio_api(m.clone()).await;
             }
-            let models_database: Vec<crate::structs_custom::ModelDataFront> =
+            let models_database: Vec<ModelDataFront> =
                 db_controller::get_all_models_vtubestudio().await.unwrap();
             let models_response: String = serde_json::to_string(&models_database).unwrap();
             Ok(models_response)
+        } else {
+            Err(())
+        }
+    } else {
+        Err(())
+    }
+}
+
+pub async fn save_expresions(data_string: String) -> Result<String, ()> {
+    let data_p: GetDataVtubestudio = serde_json::from_str(&data_string).unwrap();
+    println!("{:?}", data_p);
+    if data_p.data.is_some() {
+        let data = data_p.data.unwrap();
+        if data.expressions.is_some() {
+            let model = data.modelID.unwrap();
+            let expressions = data.expressions.unwrap();
+            for e in expressions {
+                let _r = db_controller::save_expressions_vtubestudio_api(e.clone(), model.clone()).await;
+            }
+            println!("llega");
+            let expressions_database: Vec<ExpressionslDataFront> =
+                db_controller::get_all_expressions_vtubestudio().await.unwrap();
+            let expressions_response: String = serde_json::to_string(&expressions_database).unwrap();
+            Ok(expressions_response)
         } else {
             Err(())
         }

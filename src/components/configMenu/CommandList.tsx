@@ -85,7 +85,7 @@ const CommandList = ({ commands, create_comando, delete_command, edit_command }:
                                 <button type="button" onClick={() => test()}>Elegir Ruta</button>
                             </label>
                             <label>Volumen Sonido
-                                <input name="sound_dir" id="command_form_sound_dir" type="number" min={0} max={200} defaultValue={currentCommand != undefined ? currentCommand.sound?.sound_volume as number : 100}></input>
+                                <input name="sound_volume" id="command_form_sound_volume" type="number" min={0} max={200} defaultValue={currentCommand != undefined ? currentCommand.sound?.sound_volume as number : 100}></input>
                             </label>
                             <label>Tiempo Cooldown
                                 <input name="cooldown" type="number" defaultValue={currentCommand != undefined ? currentCommand.cooldown?.units : ""}></input>
