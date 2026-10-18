@@ -80,12 +80,4 @@ pub struct CommandStructSound {
     pub sound_volume: u8,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct PointUserTwitchStruct {
-    pub points: u32,
-    pub user_id: String,
-    pub time_watch_mins: u32,
-    pub last_known_name: String,
-    pub existe_db: bool,
-}
 

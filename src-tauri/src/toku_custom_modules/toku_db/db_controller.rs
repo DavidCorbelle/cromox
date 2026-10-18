@@ -1,18 +1,11 @@
 use crate::{
     consts::{
         get_access_token_url, vtubestudio_set_expression_current_model, vtubestudio_set_model,
-        BOT_TOKEN_TYPE, STREAMER_TOKEN_TYPE, TABLE_VTUVESTUDIO_EXPRESSIONS,
-        TABLE_VTUVESTUDIO_MODELS,
+        BOT_TOKEN_TYPE, STREAMER_TOKEN_TYPE
     },
     secret_const::{self, CLIENT_ID, CLIENT_SECRET},
-    structs_custom::{self, CommandStruct, PointUserTwitchStruct},
-    structs_twitch_api,
-    structs_vtubestudio::{
-        DataShorcutFront, ExpressionslDataFront, ModelDataFront, ModelDataVtubestudio,
-        VtubestudioApiExpression, VTUBE_STUDIO_CONFIG,
-    },
-    vtubestudio::send_websocket_vtubestudio,
-    websocket_twitch,
+    structs_custom::{CommandStruct},
+    send_websocket_vtubestudio,
 };
 use reqwest::{Client, Response};
 use sqlx::{
@@ -25,6 +18,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tauri::{self, AppHandle, Emitter};
+use crate::consts::{TABLE_VTUBESTUDIO_EXPRESSIONS, TABLE_VTUBESTUDIO_MODELS};
+use crate::toku_custom_modules::toku_twitch::structs_twitch::{TwitchAccessTokenResponse, TwitchPointUserStruct};
+use crate::toku_custom_modules::toku_twitch::twitch_websocket::twitch_get_id_user;
+use crate::toku_custom_modules::toku_vtubestudio::structs_vtubestudio::{VtubestudioApiExpression, VtubestudioDataShorcutFront, VtubestudioExpressionslDataFront, VtubestudioModelData, VtubestudioModelDataFront, VTUBE_STUDIO_CONFIG};
 
 const DATABASE_PATH: &str = "database.db";
 
@@ -43,10 +40,10 @@ fn get_config_path(file_name: &str) -> String {
     base_dir_path.push(identifier);
     let base_dir = base_dir_path.as_path().to_str().unwrap();
     let path: String = format!("{base_dir}/{file_name}");
-    return path;
+    path
 }
 
-pub async fn load_config_token() -> Result<String, String> {
+pub async fn db_load_config_token() -> Result<String, String> {
     let con: SqlitePool = get_connection().await.unwrap();
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM tokens_bot")
@@ -80,7 +77,42 @@ pub async fn load_config_token() -> Result<String, String> {
     }
 }
 
-pub async fn get_command_by_trigger(command_trigger: String) -> Result<CommandStruct, String> {
+fn command_from_sqlite_row (row: &sqlx::sqlite::SqliteRow) -> CommandStruct
+{
+
+    let return_data = CommandStruct {
+        command_id: row.get("id"),
+        command_name: row.get("command_name"),
+        redeem_points_name: row.get("redeem_points_name"),
+        trigger: row.get("trigger"),
+        content_type: serde_json::from_str(row.get("content_type")).unwrap(),
+        response_text: row.get("response_text"),
+        sound: serde_json::from_str(row.get("sound")).unwrap(),
+        permits: serde_json::from_str(row.get("permits")).unwrap(),
+        cooldown: serde_json::from_str(row.get("cooldown")).unwrap(),
+        integration: serde_json::from_str(row.get("integration")).unwrap(),
+        point_cost: row.get("point_cost"),
+        enabled: row.get("enabled"),
+    };
+    return_data
+
+}
+
+fn bd_sqlite_rows_to_twitch_point_user_struct(data: &Vec<sqlx::sqlite::SqliteRow>) -> Vec<TwitchPointUserStruct>{
+    let mut vec_return:Vec<TwitchPointUserStruct> = vec![];
+    for row in data{
+        vec_return.push( TwitchPointUserStruct{
+            points: row.get("points"),
+            user_id: row.get("id"),
+            time_watch_mins: row.get("time_watch_mins"),
+            last_known_name: row.get("name"),
+            existe_db: true,
+        });
+    }
+
+    vec_return
+}
+pub async fn db_get_command_by_trigger(command_trigger: String) -> Result<CommandStruct, String> {
     let con: SqlitePool = get_connection().await.unwrap();
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM commands_twitch WHERE trigger=$1")
@@ -90,21 +122,8 @@ pub async fn get_command_by_trigger(command_trigger: String) -> Result<CommandSt
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
         if result_query.len() > 0 {
-            let i = result_query.get(0).unwrap();
-            let return_data = CommandStruct {
-                command_id: i.get("id"),
-                command_name: i.get("command_name"),
-                redeem_points_name: i.get("redeem_points_name"),
-                trigger: i.get("trigger"),
-                content_type: serde_json::from_str(i.get("content_type")).unwrap(),
-                response_text: i.get("response_text"),
-                sound: serde_json::from_str(i.get("sound")).unwrap(),
-                permits: serde_json::from_str(i.get("permits")).unwrap(),
-                cooldown: serde_json::from_str(i.get("cooldown")).unwrap(),
-                integration: serde_json::from_str(i.get("integration")).unwrap(),
-                point_cost: i.get("point_cost"),
-                enabled: i.get("enabled"),
-            };
+            let row = result_query.get(0).unwrap();
+            let return_data = command_from_sqlite_row(row);
             Ok(return_data)
         } else {
             Err(String::from("No se ha encontrado el comando"))
@@ -113,7 +132,7 @@ pub async fn get_command_by_trigger(command_trigger: String) -> Result<CommandSt
         Err(String::from("No se ha encontrado el comando"))
     }
 }
-pub async fn get_command_by_redeem_title(command_trigger: String) -> Result<CommandStruct, String> {
+pub async fn db_get_command_by_redeem_title(command_trigger: String) -> Result<CommandStruct, String> {
     let con: SqlitePool = get_connection().await.unwrap();
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM commands_twitch WHERE redeem_points_name=$1")
@@ -123,21 +142,8 @@ pub async fn get_command_by_redeem_title(command_trigger: String) -> Result<Comm
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
         if result_query.len() > 0 {
-            let i = result_query.get(0).unwrap();
-            let return_data = CommandStruct {
-                command_id: i.get("id"),
-                command_name: i.get("command_name"),
-                redeem_points_name: i.get("redeem_points_name"),
-                trigger: i.get("trigger"),
-                content_type: serde_json::from_str(i.get("content_type")).unwrap(),
-                response_text: i.get("response_text"),
-                sound: serde_json::from_str(i.get("sound")).unwrap(),
-                permits: serde_json::from_str(i.get("permits")).unwrap(),
-                cooldown: serde_json::from_str(i.get("cooldown")).unwrap(),
-                integration: serde_json::from_str(i.get("integration")).unwrap(),
-                point_cost: i.get("point_cost"),
-                enabled: i.get("enabled"),
-            };
+            let row = result_query.get(0).unwrap();
+            let return_data = command_from_sqlite_row(row);
             Ok(return_data)
         } else {
             Err(String::from("No se ha encontrado el comando"))
@@ -149,7 +155,7 @@ pub async fn get_command_by_redeem_title(command_trigger: String) -> Result<Comm
 
 pub async fn get_commands() -> Result<Vec<CommandStruct>, ()> {
     let mut return_data: Vec<CommandStruct> = vec![];
-    let con: SqlitePool = get_connection().await.unwrap();
+    let con: SqlitePool = get_connection().await?;
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM commands_twitch")
             .fetch_all(&con)
@@ -157,35 +163,22 @@ pub async fn get_commands() -> Result<Vec<CommandStruct>, ()> {
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
         for i in result_query {
-            return_data.push(structs_custom::CommandStruct {
-                command_id: i.get("id"),
-                command_name: i.get("command_name"),
-                redeem_points_name: i.get("redeem_points_name"),
-                trigger: i.get("trigger"),
-                content_type: serde_json::from_str(i.get("content_type")).unwrap(),
-                response_text: i.get("response_text"),
-                sound: serde_json::from_str(i.get("sound")).unwrap(),
-                permits: serde_json::from_str(i.get("permits")).unwrap(),
-                cooldown: serde_json::from_str(i.get("cooldown")).unwrap(),
-                integration: serde_json::from_str(i.get("integration")).unwrap(),
-                point_cost: i.get("point_cost"),
-                enabled: i.get("enabled"),
-            });
+            return_data.push(command_from_sqlite_row(&i));
         }
     }
     con.close().await;
     Ok(return_data)
 }
 
-pub async fn get_commands_string() -> Result<String, ()> {
-    let commnads_object = get_commands().await.unwrap();
-    let string_return = serde_json::to_string(&commnads_object).unwrap();
+pub async fn db_get_commands_string() -> Result<String, ()> {
+    let commands_object = get_commands().await?;
+    let string_return = serde_json::to_string(&commands_object).unwrap();
     Ok(string_return)
 }
 
-pub async fn save_new_command(data: String) -> Result<String, ()> {
-    let new_command: structs_custom::CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
-    let con: SqlitePool = get_connection().await.unwrap();
+pub async fn db_save_new_command(data: String) -> Result<String, ()> {
+    let new_command: CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
+    let con: SqlitePool = get_connection().await?;
     let new_command_content_type: String =
         serde_json::to_string(&new_command.content_type.clone()).unwrap();
     let new_command_sound: String = serde_json::to_string(&new_command.sound.clone()).unwrap();
@@ -213,9 +206,9 @@ pub async fn save_new_command(data: String) -> Result<String, ()> {
     Ok(String::from("Ok"))
 }
 
-pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
-    let new_command: structs_custom::CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
-    let con: SqlitePool = get_connection().await.unwrap();
+pub async fn db_edit_command(id: u16, data: String) -> Result<String, ()> {
+    let new_command: CommandStruct = serde_json::from_str(&data.as_str()).unwrap();
+    let con: SqlitePool = get_connection().await?;
     let new_command_content_type: String =
         serde_json::to_string(&new_command.content_type.clone()).unwrap();
     let new_command_sound: String = serde_json::to_string(&new_command.sound.clone()).unwrap();
@@ -244,8 +237,8 @@ pub async fn edit_command(id: u16, data: String) -> Result<String, ()> {
     Ok(String::from("Ok"))
 }
 
-pub async fn delete_command(id: u16) -> Result<String, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
+pub async fn db_delete_command(id: u16) -> Result<String, ()> {
+    let con: SqlitePool = get_connection().await?;
     let _result: SqliteQueryResult = sqlx::query("DELETE FROM commands_twitch WHERE id = $1")
         .bind(id)
         .execute(&con)
@@ -255,9 +248,9 @@ pub async fn delete_command(id: u16) -> Result<String, ()> {
     Ok(String::from("Ok"))
 }
 
-pub async fn get_all_points_user() -> Result<Vec<PointUserTwitchStruct>, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
-    let mut return_data: Vec<PointUserTwitchStruct> = vec![];
+pub async fn db_get_all_points_user() -> Result<Vec<TwitchPointUserStruct>, ()> {
+    let con: SqlitePool = get_connection().await?;
+    let mut return_data: Vec<TwitchPointUserStruct> = vec![];
 
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM users_twitch")
@@ -265,23 +258,15 @@ pub async fn get_all_points_user() -> Result<Vec<PointUserTwitchStruct>, ()> {
             .await;
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
-        for i in result_query {
-            return_data.push(structs_custom::PointUserTwitchStruct {
-                points: i.get("points"),
-                user_id: i.get("id"),
-                time_watch_mins: i.get("time_watch_mins"),
-                last_known_name: i.get("name"),
-                existe_db: true,
-            });
-        }
+        return_data = bd_sqlite_rows_to_twitch_point_user_struct(&result_query);
     }
     con.close().await;
     Ok(return_data)
 }
 
-pub async fn get_points_user(user_id: String) -> Result<Vec<PointUserTwitchStruct>, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
-    let mut return_data: Vec<PointUserTwitchStruct> = vec![];
+pub async fn db_get_points_user(user_id: String) -> Result<Vec<TwitchPointUserStruct>, ()> {
+    let con: SqlitePool = get_connection().await?;
+    let mut return_data: Vec<TwitchPointUserStruct> = vec![];
 
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM users_twitch WHERE id=$1")
@@ -290,21 +275,13 @@ pub async fn get_points_user(user_id: String) -> Result<Vec<PointUserTwitchStruc
             .await;
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
-        for i in result_query {
-            return_data.push(structs_custom::PointUserTwitchStruct {
-                points: i.get("points"),
-                user_id: i.get("id"),
-                time_watch_mins: i.get("time_watch_mins"),
-                last_known_name: i.get("name"),
-                existe_db: true,
-            });
-        }
+        return_data = bd_sqlite_rows_to_twitch_point_user_struct(&result_query);
     }
     con.close().await;
     Ok(return_data)
 }
 
-pub async fn save_points_user(user_id: String, current_points: u32) {
+pub async fn db_save_points_user(user_id: String, current_points: u32) {
     let con: SqlitePool = get_connection().await.unwrap();
     let _result: SqliteQueryResult =
         sqlx::query("UPDATE users_twitch SET  points = $2 WHERE id = $1")
@@ -315,7 +292,7 @@ pub async fn save_points_user(user_id: String, current_points: u32) {
             .unwrap();
 }
 
-pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUserTwitchStruct>) {
+pub async fn db_save_all_points_user(points_file_data: Vec<TwitchPointUserStruct>) {
     let con: SqlitePool = get_connection().await.unwrap();
     for i in points_file_data.clone() {
         let _result: SqliteQueryResult = sqlx::query(
@@ -332,7 +309,7 @@ pub async fn save_all_points_user(points_file_data: Vec<structs_custom::PointUse
     con.close().await;
 }
 
-pub async fn check_tokens(app: AppHandle) {
+pub async fn db_check_tokens(app: AppHandle) {
     let token_bot = std::env::var("tokenBot").ok().unwrap_or(String::from(""));
     let token_streamer = std::env::var("tokenStreamer")
         .ok()
@@ -353,22 +330,22 @@ pub async fn check_tokens(app: AppHandle) {
     }
 }
 
-pub async fn save_token_auth(token: &str, type_token: &str) -> Result<String, String> {
+pub async fn db_save_token_auth(token: &str, type_token: &str) -> Result<String, String> {
     //GET NEW ACCESS TOKEN
     let url_get_token = secret_const::get_refresh_token_url(token.to_string());
-    let client: Client = reqwest::Client::new();
+    let client: Client = Client::new();
     let response: Result<Response, reqwest::Error> = client.post(url_get_token).send().await;
     if response.is_ok() {
         let response_data = response.unwrap();
         let response_string = response_data.text().await.unwrap();
-        let response_object: structs_twitch_api::AccessTokenResponseTwitch =
+        let response_object: TwitchAccessTokenResponse =
             serde_json::from_str(&response_string).unwrap();
         if type_token == BOT_TOKEN_TYPE {
             std::env::set_var("tokenBot", response_object.access_token);
         } else if type_token == STREAMER_TOKEN_TYPE {
             std::env::set_var("tokenStreamer", response_object.access_token);
         }
-        let user: String = websocket_twitch::get_id_user_twitch(type_token)
+        let user: String = twitch_get_id_user(type_token)
             .await
             .unwrap();
         let con: SqlitePool = get_connection().await.unwrap();
@@ -414,7 +391,7 @@ pub async fn save_token_auth(token: &str, type_token: &str) -> Result<String, St
 
 async fn get_access_token(refresh_token: &str) -> Result<String, ()> {
     let url: String = get_access_token_url();
-    let client = reqwest::Client::new();
+    let client = Client::new();
     let mut params = HashMap::new();
     params.insert("client_id", CLIENT_ID);
     params.insert("client_secret", CLIENT_SECRET);
@@ -423,12 +400,12 @@ async fn get_access_token(refresh_token: &str) -> Result<String, ()> {
     let response: Result<Response, reqwest::Error> = client.post(url).form(&params).send().await;
     let response_data: Response = response.unwrap();
     let response_string: String = response_data.text().await.unwrap();
-    let response_object: structs_twitch_api::AccessTokenResponseTwitch =
+    let response_object: TwitchAccessTokenResponse =
         serde_json::from_str(&response_string).unwrap();
     Ok(response_object.access_token)
 }
 
-pub async fn save_token_integration(integration_name: &str, token: String) {
+pub async fn db_save_token_integration(integration_name: &str, token: String) {
     let con: SqlitePool = get_connection().await.unwrap();
     let _result: SqliteQueryResult = sqlx::query(
         "INSERT INTO integrations (app, token) VALUES ($1, $2) ON CONFLICT(app) DO UPDATE SET token = excluded.token;",
@@ -440,8 +417,8 @@ pub async fn save_token_integration(integration_name: &str, token: String) {
     .unwrap();
 }
 
-pub async fn get_token_integration(integration_name: &str) -> Result<String, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
+pub async fn db_get_token_integration(integration_name: &str) -> Result<String, ()> {
+    let con: SqlitePool = get_connection().await?;
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT * FROM  integrations  WHERE app = $1")
             .bind(integration_name)
@@ -463,8 +440,8 @@ pub async fn get_token_integration(integration_name: &str) -> Result<String, ()>
     }
 }
 
-//SHORCUTS
-pub async fn save_shorcut_multiple(data: Vec<DataShorcutFront>, table: &str) {
+//SHORTCUTS
+pub async fn db_save_shorcut_multiple(data: Vec<VtubestudioDataShorcutFront>, table: &str) {
     let con: SqlitePool = get_connection().await.unwrap();
     for d in data {
         let shortcut = d.shortcut.unwrap();
@@ -519,7 +496,7 @@ pub async fn save_shorcut_multiple(data: Vec<DataShorcutFront>, table: &str) {
     }
 }
 
-pub async fn check_shorcut_and_use(string_shorcut: String) {
+pub async fn db_check_shorcut_and_use(string_shorcut: String) {
     let con: SqlitePool = get_connection().await.unwrap();
     let select = sqlx::query("SELECT * FROM  shorcuts  WHERE shorcut = $1")
         .bind(string_shorcut)
@@ -530,12 +507,12 @@ pub async fn check_shorcut_and_use(string_shorcut: String) {
         for s in select {
             let shorcut: String = s.get("shorcut");
             let table_name: String = s.get("table_name");
-            if table_name == TABLE_VTUVESTUDIO_MODELS {
+            if table_name == TABLE_VTUBESTUDIO_MODELS {
                 let model: String = s.get("id_item");
                 let message = vtubestudio_set_model(model);
                 let _r = send_websocket_vtubestudio(message).await;
             }
-            if table_name == TABLE_VTUVESTUDIO_EXPRESSIONS {
+            if table_name == TABLE_VTUBESTUDIO_EXPRESSIONS {
                 println!("Entra");
                 let expression: String = s.get("id_item");
                 let message = vtubestudio_set_expression_current_model(expression);
@@ -548,8 +525,8 @@ pub async fn check_shorcut_and_use(string_shorcut: String) {
 }
 
 // VTUBE_STUDIO
-pub async fn get_all_models_vtubestudio() -> Result<Vec<ModelDataFront>, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
+pub async fn db_get_all_models_vtubestudio() -> Result<Vec<VtubestudioModelDataFront>, ()> {
+    let con: SqlitePool = get_connection().await?;
     let mut models = vec![];
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT VTubeStudio_models.model_id as model_id, VTubeStudio_models.model_name as model_name, shorcuts.shorcut as shorcut FROM VTubeStudio_models LEFT JOIN shorcuts ON VTubeStudio_models.model_id = shorcuts.id_item")
@@ -558,7 +535,7 @@ pub async fn get_all_models_vtubestudio() -> Result<Vec<ModelDataFront>, ()> {
     if result.is_ok() {
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
         for i in result_query {
-            models.push(ModelDataFront {
+            models.push(VtubestudioModelDataFront {
                 model_name: i.get("model_name"),
                 model_id: i.get("model_id"),
                 shortcut: i.get("shorcut"),
@@ -568,7 +545,7 @@ pub async fn get_all_models_vtubestudio() -> Result<Vec<ModelDataFront>, ()> {
     Ok(models)
 }
 
-pub async fn save_model_vtubestudio_api(model: ModelDataVtubestudio) {
+pub async fn db_save_model_vtubestudio_api(model: VtubestudioModelData) {
     let con: SqlitePool = get_connection().await.unwrap();
     let _result: SqliteQueryResult = sqlx::query(
         "INSERT INTO VTubeStudio_models (model_id, model_name) VALUES ($1, $2) ON CONFLICT(model_id) DO UPDATE SET model_name = excluded.model_name;",
@@ -580,7 +557,7 @@ pub async fn save_model_vtubestudio_api(model: ModelDataVtubestudio) {
     .unwrap();
 }
 
-pub async fn save_expressions_vtubestudio_api(
+pub async fn db_save_expressions_vtubestudio_api(
     expression: VtubestudioApiExpression,
     model_id: String,
 ) {
@@ -607,8 +584,8 @@ pub async fn save_expressions_vtubestudio_api(
     }
 }
 
-pub async fn get_all_expressions_vtubestudio() -> Result<Vec<ExpressionslDataFront>, ()> {
-    let con: SqlitePool = get_connection().await.unwrap();
+pub async fn db_get_all_expressions_vtubestudio() -> Result<Vec<VtubestudioExpressionslDataFront>, ()> {
+    let con: SqlitePool = get_connection().await?;
     let mut expressions = vec![];
     let result: Result<Vec<sqlx::sqlite::SqliteRow>, sqlx::Error> =
         sqlx::query("SELECT VTubeStudio_expressions.model_id as model_id, VTubeStudio_expressions.expression_name as expression_name, VTubeStudio_expressions.expression_file as expression_file, shorcuts.shorcut as shorcut FROM VTubeStudio_expressions LEFT JOIN shorcuts ON VTubeStudio_expressions.model_id = shorcuts.parent_id AND VTubeStudio_expressions.expression_file = shorcuts.id_item")
@@ -618,7 +595,7 @@ pub async fn get_all_expressions_vtubestudio() -> Result<Vec<ExpressionslDataFro
         println!("Hay Resultados");
         let result_query: Vec<sqlx::sqlite::SqliteRow> = result.unwrap();
         for i in result_query {
-            expressions.push(ExpressionslDataFront {
+            expressions.push(VtubestudioExpressionslDataFront {
                 expression_name: i.get("expression_name"),
                 expression_file: i.get("expression_file"),
                 model_id: i.get("model_id"),
@@ -629,10 +606,10 @@ pub async fn get_all_expressions_vtubestudio() -> Result<Vec<ExpressionslDataFro
     Ok(expressions)
 }
 
-pub async fn get_vtubestudio_config() -> Result<String, ()> {
-    let models_data = get_all_models_vtubestudio().await.unwrap();
+pub async fn db_get_vtubestudio_config() -> Result<String, ()> {
+    let models_data = db_get_all_models_vtubestudio().await?;
     let data: VTUBE_STUDIO_CONFIG = VTUBE_STUDIO_CONFIG {
-        models_data: models_data,
+        models_data,
     };
     let data_string = serde_json::to_string(&data).unwrap();
     Ok(data_string)

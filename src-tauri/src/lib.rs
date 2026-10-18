@@ -1,46 +1,36 @@
-use crate::consts::{TABLE_VTUVESTUDIO_EXPRESSIONS, TABLE_VTUVESTUDIO_MODELS};
+use crate::consts::{TABLE_VTUBESTUDIO_EXPRESSIONS, TABLE_VTUBESTUDIO_MODELS};
 // Made by David Corbelle García
-use crate::structs_custom::{CommandStruct, PointUserTwitchStruct};
-use crate::structs_twitch_api::{MessageTwitchEvent, RedeemTwitchEvent};
-use crate::structs_vtubestudio::{DataShorcutFront, VTUBESTUDIO_ACTIONS};
+use crate::structs_custom::{CommandStruct};
 use reqwest::{self, Error, Response, StatusCode};
 use std::env;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use tauri::{AppHandle, Emitter};
-
-#[path = "functions/commandsTwitch/command_twitch.rs"]
-mod command_twitch;
-#[path = "consts.rs"]
+mod toku_custom_modules;
+use crate::toku_custom_modules::toku_twitch::structs_twitch::{TwitchMessageEvent, TwitchPointUserStruct, TwitchRedeemEvent};
+use crate::toku_custom_modules::toku_twitch::twitch_actions::twitch_points;
+use crate::toku_custom_modules::toku_twitch::twitch_commands::execute_command_bot;
+use crate::toku_custom_modules::toku_twitch::twitch_websocket::{twitch_implement_subscribers, twitch_send_message};
+use crate::toku_custom_modules::toku_vtubestudio::structs_vtubestudio::{VtubestudioDataShorcutFront, VTUBESTUDIO_ACTIONS};
+use crate::toku_custom_modules::toku_vtubestudio::vtubestudio::{get_token_vtubestudio, save_expresions_vtubestudio, save_models_vtubestudio, send_websocket_vtubestudio};
+use crate::toku_custom_modules::toku_db::db_controller::{db_check_tokens, db_delete_command, db_edit_command, db_get_command_by_redeem_title, db_get_command_by_trigger, db_get_commands_string, db_get_points_user, db_get_vtubestudio_config, db_load_config_token, db_save_new_command, db_save_points_user, db_save_shorcut_multiple, db_save_token_auth};
 mod consts;
-#[path = "functions/database/db_controller.rs"]
-mod db_controller;
-#[path = "functions/integrations/linux.rs"]
-mod intg_linux;
-#[path = "migrations.rs"]
-mod migrations_db;
-#[path = "secret_const.rs"]
 mod secret_const;
-#[path = "structs/structs_custom.rs"]
+mod migrations;
 mod structs_custom;
-#[path = "structs/structs_twitch_api.rs"]
-mod structs_twitch_api;
-#[path = "structs/structs_vtubestudio.rs"]
-mod structs_vtubestudio;
-#[path = "functions/integrations/vtubestudio.rs"]
-mod vtubestudio;
-#[path = "functions/websocket/websocketTwitch.rs"]
-mod websocket_twitch;
+
+
+
 
 #[tauri::command]
 fn get_bot_id() -> String {
-    return std::env::var("bot_id").ok().unwrap_or(String::from(""));
+    env::var("bot_id").ok().unwrap_or(String::from(""))
 }
 
 #[tauri::command]
 async fn send_message_twitch(message: &str) -> Result<String, ()> {
     let response: Result<Response, reqwest::Error> =
-        websocket_twitch::send_message_twitch(message).await;
+        twitch_send_message(message).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Mensaje enviado con exito");
@@ -52,7 +42,7 @@ async fn send_message_twitch(message: &str) -> Result<String, ()> {
 
 #[tauri::command]
 async fn save_new_command(command_data: String) -> Result<String, ()> {
-    let response: Result<String, ()> = db_controller::save_new_command(command_data).await;
+    let response: Result<String, ()> = db_save_new_command(command_data).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Comando guardado con exito");
@@ -64,7 +54,7 @@ async fn save_new_command(command_data: String) -> Result<String, ()> {
 
 #[tauri::command]
 async fn edit_command(command_id: u16, command_data: String) -> Result<String, ()> {
-    let response: Result<String, ()> = db_controller::edit_command(command_id, command_data).await;
+    let response: Result<String, ()> = db_edit_command(command_id, command_data).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Comando guardado con exito");
@@ -76,7 +66,7 @@ async fn edit_command(command_id: u16, command_data: String) -> Result<String, (
 
 #[tauri::command]
 async fn delete_command(command_id: u16) -> Result<String, ()> {
-    let response: Result<String, ()> = db_controller::delete_command(command_id).await;
+    let response: Result<String, ()> = db_delete_command(command_id).await;
     let response_string: String;
     if response.is_ok() {
         response_string = String::from("Comando guardado con exito");
@@ -88,7 +78,7 @@ async fn delete_command(command_id: u16) -> Result<String, ()> {
 
 #[tauri::command]
 async fn start_data_config(app: AppHandle) -> Result<String, ()> {
-    let _res: String = db_controller::load_config_token()
+    let _res: String = db_load_config_token()
         .await
         .unwrap_or(String::from("Error"));
     let data_config: String = std::env::var("configLoaded")
@@ -98,13 +88,13 @@ async fn start_data_config(app: AppHandle) -> Result<String, ()> {
     if data_config == "S" {
         let data_test: String = std::env::var("tokenBot").unwrap_or(String::from(""));
         if data_test != "" {
-            tokio::spawn(db_controller::check_tokens(app.clone()));
+            tokio::spawn(db_check_tokens(app.clone()));
             response = String::from("LOADED");
             let points_started: String = std::env::var("points_started")
                 .ok()
                 .unwrap_or(String::from("Error"));
             if points_started != "S" {
-                tokio::spawn(command_twitch::twitch_points(app));
+                tokio::spawn(twitch_points(app));
             }
         } else {
             response = String::from("NODATA");
@@ -117,18 +107,18 @@ async fn start_data_config(app: AppHandle) -> Result<String, ()> {
 }
 #[tauri::command]
 async fn get_data_commands() -> Result<String, ()> {
-    let res: String = db_controller::get_commands_string().await.unwrap();
+    let res: String = db_get_commands_string().await?;
     Ok(res)
 }
 
 #[tauri::command]
-async fn implement_suscribers(session_id: &str, app: AppHandle) -> Result<String, String> {
+async fn implement_subscribers(session_id: &str, app: AppHandle) -> Result<String, String> {
     let response: Result<StatusCode, Error> =
-        websocket_twitch::implement_suscribers(session_id).await;
+        twitch_implement_subscribers(session_id).await;
     if response.is_ok() {
         let response_processed: StatusCode = response.unwrap();
         if response_processed.is_client_error() {
-            tokio::spawn(db_controller::check_tokens(app));
+            tokio::spawn(db_check_tokens(app));
             Ok(format!("Error al iniciar el suscriber"))
         } else {
             Ok(format!(
@@ -147,26 +137,24 @@ async fn execute_command_message(event_string: &str) -> Result<String, ()> {
     if event.is_err() {
         Ok(String::from("Error"))
     } else {
-        let event_ok: MessageTwitchEvent = event.unwrap();
+        let event_ok: TwitchMessageEvent = event.unwrap();
         let message_text_command = event_ok.message.text;
         let message_split: Vec<&str> = message_text_command.split(' ').collect();
         let command_trigger: String = message_split[0].replace("!", "");
-        let user_bot_container: Vec<PointUserTwitchStruct> =
-            db_controller::get_points_user(event_ok.chatter_user_id)
-                .await
-                .unwrap();
+        let user_bot_container: Vec<TwitchPointUserStruct> =
+            db_get_points_user(event_ok.chatter_user_id).await?;
         let user_bot = user_bot_container.get(0).unwrap();
 
-        let command: CommandStruct = db_controller::get_command_by_trigger(command_trigger)
+        let command: CommandStruct = db_get_command_by_trigger(command_trigger)
             .await
             .unwrap_or(CommandStruct::default());
         if user_bot.points >= command.point_cost {
             let _res: String =
-                command_twitch::execute_command(command.clone(), message_text_command.as_str())
+                execute_command_bot(command.clone(), message_text_command.as_str())
                     .await
                     .unwrap();
             let actual_points = user_bot.points - command.point_cost;
-            db_controller::save_points_user(user_bot.user_id.clone(), actual_points).await;
+            db_save_points_user(user_bot.user_id.clone(), actual_points).await;
             Ok(_res)
         } else {
             Ok(String::from(
@@ -182,12 +170,12 @@ async fn execute_command_redeem(event_string: &str) -> Result<String, ()> {
     if event.is_err() {
         Ok(String::from("Error"))
     } else {
-        let event_ok: RedeemTwitchEvent = event.unwrap();
+        let event_ok: TwitchRedeemEvent = event.unwrap();
         let command_trigger: String = event_ok.reward.title;
-        let command: CommandStruct = db_controller::get_command_by_redeem_title(command_trigger)
+        let command: CommandStruct = db_get_command_by_redeem_title(command_trigger)
             .await
             .unwrap_or(CommandStruct::default());
-        let _res: String = command_twitch::execute_command(command, &event_ok.user_input.as_str())
+        let _res: String = execute_command_bot(command, &event_ok.user_input.as_str())
             .await
             .unwrap();
         Ok(_res)
@@ -203,11 +191,11 @@ async fn get_url_token(token_type: String, app: AppHandle) -> Result<String, ()>
 
 #[tauri::command]
 async fn start_config_vtubestudio(app: AppHandle) {
-    let _res = vtubestudio::get_token_vtubestudio(app).await;
+    let _res = get_token_vtubestudio(app).await;
 }
 
 #[tauri::command]
-async fn action_new_shorcut() {
+async fn action_new_shortcut() {
     std::env::set_var("ListenForNewShorcut", "S");
 }
 
@@ -235,7 +223,7 @@ async fn get_auth_token(token_type: String, app: AppHandle) {
                         let token: &str = param_split.get(1).unwrap();
                         let response = "HTTP/1.1 200 OK\r\nContent-Length: 48\r\nContent-Type: text/html\r\n\r\n<h1>Token Updated, you can close the window</h1>";
                         stream.write(response.as_bytes()).unwrap();
-                        let res = db_controller::save_token_auth(token, token_type.as_str()).await;
+                        let res = db_save_token_auth(token, token_type.as_str()).await;
                         if res.is_ok() {
                             app.emit("token-updated", token_type.clone()).unwrap();
                         }
@@ -249,24 +237,24 @@ async fn get_auth_token(token_type: String, app: AppHandle) {
 //VTUBESTUDIO
 #[tauri::command]
 async fn vtubestudio_save_shorcuts_models(data_send: String) {
-    let data_shorcut: Vec<DataShorcutFront> = serde_json::from_str(&data_send).unwrap();
-    tokio::spawn(db_controller::save_shorcut_multiple(
+    let data_shorcut: Vec<VtubestudioDataShorcutFront> = serde_json::from_str(&data_send).unwrap();
+    tokio::spawn(db_save_shorcut_multiple(
         data_shorcut,
-        TABLE_VTUVESTUDIO_MODELS,
+        TABLE_VTUBESTUDIO_MODELS,
     ));
 }
 #[tauri::command]
 async fn vtubestudio_save_shorcuts_expressions(data_send: String) {
-    let data_shorcut: Vec<DataShorcutFront> = serde_json::from_str(&data_send).unwrap();
-    tokio::spawn(db_controller::save_shorcut_multiple(
+    let data_shorcut: Vec<VtubestudioDataShorcutFront> = serde_json::from_str(&data_send).unwrap();
+    tokio::spawn(db_save_shorcut_multiple(
         data_shorcut,
-        TABLE_VTUVESTUDIO_EXPRESSIONS,
+        TABLE_VTUBESTUDIO_EXPRESSIONS,
     ));
 }
 
 #[tauri::command]
 async fn get_config_vtubestudio() -> Result<String, String> {
-    let config_vtubestudio = db_controller::get_vtubestudio_config().await;
+    let config_vtubestudio = db_get_vtubestudio_config().await;
     if config_vtubestudio.is_ok() {
         let res:String = config_vtubestudio.unwrap();
         Ok(res)
@@ -285,26 +273,26 @@ async fn actions_vtubestudio(action: VTUBESTUDIO_ACTIONS, param: String) -> Resu
         VTUBESTUDIO_ACTIONS::GET_MODELS => {
             let message: String = consts::vtubestudio_get_models();
             let response_raw: Result<String, tokio_tungstenite::tungstenite::Error> =
-                vtubestudio::send_websocket_vtubestudio(message).await;
+                send_websocket_vtubestudio(message).await;
 
             if response_raw.is_ok() {
                 let response_string: String = response_raw.unwrap();
-                response = vtubestudio::save_models(response_string).await.unwrap();
+                response = save_models_vtubestudio(response_string).await?;
             }
         }
         VTUBESTUDIO_ACTIONS::SET_MODEL => {
             let message: String = consts::vtubestudio_set_model(param);
-            response = vtubestudio::send_websocket_vtubestudio(message)
+            response = send_websocket_vtubestudio(message)
                 .await
                 .unwrap_or(String::from("Error"));
         }
         VTUBESTUDIO_ACTIONS::GET_EXPRESSIONS_MODEL => {
             let message: String = consts::vtubestudio_get_expressions_current_model();
-            let response_raw = vtubestudio::send_websocket_vtubestudio(message)
+            let response_raw = send_websocket_vtubestudio(message)
                 .await;
              if response_raw.is_ok() {
                 let response_string: String = response_raw.unwrap();
-                response = vtubestudio::save_expresions(response_string).await.unwrap();
+                response = save_expresions_vtubestudio(response_string).await?;
             }
         
         }
@@ -318,7 +306,7 @@ async fn actions_vtubestudio(action: VTUBESTUDIO_ACTIONS, param: String) -> Resu
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env::set_var("RUST_BACKTRACE", "1");
-    let migrations: Vec<tauri_plugin_sql::Migration> = migrations_db::get_migrations();
+    let migrations: Vec<tauri_plugin_sql::Migration> = migrations::get_migrations();
 
     tauri::Builder::default()
         .plugin(
@@ -330,7 +318,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_bot_id,
-            implement_suscribers,
+            implement_subscribers,
             start_data_config,
             send_message_twitch,
             save_new_command,
@@ -342,7 +330,7 @@ pub fn run() {
             actions_vtubestudio,
             execute_command_redeem,
             start_config_vtubestudio,
-            action_new_shorcut,
+            action_new_shortcut,
             vtubestudio_save_shorcuts_models,
             vtubestudio_save_shorcuts_expressions,
             get_config_vtubestudio

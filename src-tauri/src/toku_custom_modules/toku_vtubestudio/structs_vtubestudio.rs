@@ -3,47 +3,47 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct AuthResponseVtubestudio {
+pub struct VtubestudioAuthResponse {
     pub apiName: String,
     apiVersion: String,
     timestamp: u128,
     messageType: String,
     requestID: String,
-    pub data: AuthResponseVtubestudioData,
+    pub data: VtubestudioAuthResponseData,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct AuthResponseVtubestudioData {
+pub struct VtubestudioAuthResponseData {
     pub authenticationToken: String,
 }
 #[derive(Serialize, Deserialize, Clone)]
-pub struct AuthSendVtubestudio {
+pub struct VtubestudioAuthSend {
     pub apiName: String,
     pub apiVersion: String,
     pub requestID: String,
     pub messageType: String,
-    pub data: AuthSendVtubestudioData,
+    pub data: VtubestudioAuthSendData,
 }
 #[derive(Serialize, Deserialize, Clone)]
-pub struct AuthSendVtubestudioData {
+pub struct VtubestudioAuthSendData {
     pub pluginName: String,
     pub pluginDeveloper: String,
     pub authenticationToken: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct GetDataVtubestudio {
+pub struct VtubestudioGetData {
     pub apiName: String,
     pub apiVersion: String,
     pub requestID: String,
     pub messageType: String,
-    pub data: Option<DataVtubestudio>,
+    pub data: Option<VtubestudioData>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct DataVtubestudio {
+pub struct VtubestudioData {
     pub modelID: Option<String>,
     pub numberOdModels: Option<u32>,
-    pub availableModels: Option<Vec<ModelDataVtubestudio>>,
+    pub availableModels: Option<Vec<VtubestudioModelData>>,
     pub details:Option<bool>,
     pub expressions:Option<Vec<VtubestudioApiExpression>>,
     pub expresionFile:Option<String>,
@@ -51,15 +51,15 @@ pub struct DataVtubestudio {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct GetDataVtubestudioActivateExpresion {
+pub struct VtubestudioGetDataActivateExpresion {
     pub apiName: String,
     pub apiVersion: String,
     pub requestID: String,
     pub messageType: String,
-    pub data: DataVtubestudioActivateExpresion,
+    pub data: VtubestudioDataActivateExpresion,
 }
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct DataVtubestudioActivateExpresion {
+pub struct VtubestudioDataActivateExpresion {
     pub expressionFile:String,
     pub active: bool,
     pub fadeTime:f32
@@ -71,7 +71,7 @@ pub struct VtubestudioApiExpression {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ModelDataVtubestudio {
+pub struct VtubestudioModelData {
     pub modelLoaded: bool,
     pub modelName: String,
     pub modelID: String,
@@ -80,7 +80,7 @@ pub struct ModelDataVtubestudio {
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct DataShorcutFront {
+pub struct VtubestudioDataShorcutFront {
     pub id_item:String, 
     pub parent_id:Option<String>,
     pub shortcut:Option<String>
@@ -96,18 +96,18 @@ pub enum VTUBESTUDIO_ACTIONS {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct VTUBE_STUDIO_CONFIG {
-    pub models_data:Vec<ModelDataFront>
+    pub models_data:Vec<VtubestudioModelDataFront>
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ModelDataFront {
+pub struct VtubestudioModelDataFront {
     pub model_name:String,
     pub model_id:String,
     pub shortcut:String
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ExpressionslDataFront {
+pub struct VtubestudioExpressionslDataFront {
     pub expression_file:String,
     pub expression_name:String,
     pub model_id:String,

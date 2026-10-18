@@ -1,18 +1,25 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import React, {useEffect, useRef, useState} from "react";
+import {invoke} from "@tauri-apps/api/core";
 import "./App.css";
-import { useRef } from "react";
-import { MENU_ACTUAL, message_types, suscription_types, TIPO_COMANDO_TEXTO, TYPE_TOKEN } from "./consts";
+import {MENU_ACTUAL, message_types, suscription_types, TIPO_COMANDO_TEXTO, TYPE_TOKEN} from "./consts";
 import ChatBox from "./components/chat/ChatBox";
 import TokenTwitchConfig from "./components/configMenu/TokenTwitchConfig";
 import CommandList from "./components/configMenu/CommandList";
-import { canIUseCommand } from "./functions/function_commands";
-import { listen } from '@tauri-apps/api/event';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { ChatMessage, Command, CommandUses, COOLDOWN_TYPE, messageEvent, PayloadViewers, redeemEvent } from "./custom-types/types.td";
+import {canIUseCommand} from "./functions/function_commands";
+import {listen} from '@tauri-apps/api/event';
+import {openUrl} from '@tauri-apps/plugin-opener';
+import {
+  ChatMessage,
+  Command,
+  CommandUses,
+  COOLDOWN_TYPE,
+  messageEvent,
+  PayloadViewers,
+  redeemEvent
+} from "./custom-types/types.td";
 import MenuIntegration from "./components/integrations/MenuIntegrations";
 import ConfigMenu from "./components/configMenu/ConfigMenu";
-import { AvataresVTubeStudio, IntegrationStartedList } from "./components/integrations/types.td";
+import {IntegrationStartedList} from "./components/integrations/types.td";
 
 let didInit = false;
 let socketStarted = false;
@@ -32,7 +39,7 @@ function App() {
   const [messageChatBox, setMessageChatBox] = useState("");
   const [broadcasterTokenLoaded, setBroadcasterTokenLoaded] = useState(false);
   const [botTokenLoaded, setBotTokenLoaded] = useState(false);
-  const [suscribersStarted, setSuscribersStarted] = useState(false);
+  const [subscribersStarted, setSubscribersStarted] = useState(false);
   const [dataLoaded, setDataLoaded] = useState<any>(undefined);
   const [currentMenu, setCurrentMenu] = useState(MENU_ACTUAL.CHAT);
   const [integrationsStarted, SetIntegrationsStarted] = useState<IntegrationStartedList>({ VtubeStudio: false });
@@ -61,8 +68,7 @@ function App() {
   });
 
   listen<string>('refresh-viewers', (event) => {
-    let viewers_parse = JSON.parse(event.payload);
-    viewers.current = viewers_parse;
+    viewers.current = JSON.parse(event.payload);
     setForceUpdate(!forceUpdate);
 
   });
@@ -82,7 +88,7 @@ function App() {
   });
 
   useEffect(() => {
-    if (didInit == false) {
+    if (!didInit) {
       didInit = true
       getDataLoaded();
     }
@@ -90,25 +96,25 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (botTokenLoaded == true && broadcasterTokenLoaded == true && suscribersStarted == false && sessionIDtmp.current != undefined) {
+    if (botTokenLoaded && broadcasterTokenLoaded && !subscribersStarted && sessionIDtmp.current != undefined) {
       tryStartSuscribers();
 
     }
   }, [botTokenLoaded, broadcasterTokenLoaded, sessionIDtmp]);
 
   async function tryStartSuscribers() {
-    if (suscribersStarted == false) {
+    if (!subscribersStarted) {
       botIdChat.current = await invoke("get_bot_id");
       let sessionId = sessionIDtmp.current;
-      let tryStart: string = await invoke("implement_suscribers", { sessionId });
+      let tryStart: string = await invoke("implement_subscribers", { sessionId });
       if (!tryStart.includes("Error")) {
-        setSuscribersStarted(true);
+        setSubscribersStarted(true);
       }
     }
 
   }
   useEffect(() => {
-    if (socket != undefined && socketStarted == false) {
+    if (socket != undefined && !socketStarted) {
       socketStarted = true;
       // Connection opened
       socket.addEventListener("open", _event => {
@@ -121,9 +127,7 @@ function App() {
 
   function process_message(event: MessageEvent<any>) {
     if (sessionIDtmp.current == undefined) {
-      let session_id = JSON.parse(event.data).payload.session.id;
-      sessionIDtmp.current = session_id;
-
+      sessionIDtmp.current = JSON.parse(event.data).payload.session.id;
     } else {
       let data = JSON.parse(event.data);
       console.log(data);
@@ -151,9 +155,7 @@ function App() {
   async function update_commands() {
     let dataCommandsString = await invoke("get_data_commands")
     if (dataCommandsString != "") {
-      let dataCommands = JSON.parse(dataCommandsString as string);
-      let dataUpdate = dataCommands;
-      commands.current = dataUpdate;
+      commands.current = JSON.parse(dataCommandsString as string);
       setForceUpdate(!forceUpdate);
     }
 
@@ -179,7 +181,7 @@ function App() {
     let find = commands.current.filter((e) => { return (e.redeem_points_name == messageTextCommand) })
     if (find.length > 0) {
       let command = find[0];
-      if (command.enabled == true) {
+      if (command.enabled) {
         invoke('execute_command_redeem', { eventString });
       }
 
@@ -194,7 +196,7 @@ function App() {
     if (find.length > 0) {
       let command = find[0];
       let usable = canIUseCommand(command.command_id, i.chatter_user_id, command.cooldown, commandUses.current);
-      if (usable && command.enabled == true) {
+      if (usable && command.enabled) {
         commandUses.current.push({ commandIdUsed: command.command_id, lastTimeUsed: new Date(), userId: i.chatter_user_id });
         invoke('execute_command_message', { eventString });
 
@@ -228,8 +230,8 @@ function App() {
 
   function prepare_data_command(data: FormData): Command {
     let commands_data = commands.current;
-    let command_id = (commands != undefined && commands_data.length > 0 ? commands_data[commands_data.length - 1].command_id as number + 1 : 1);
-    let new_command: Command = {
+    let command_id = (commands_data.length > 0 ? commands_data[commands_data.length - 1].command_id as number + 1 : 1);
+    return {
       command_id: command_id,
       command_name: data.get("command_name") as string,
       trigger: data.get("trigger") as string,
@@ -257,13 +259,12 @@ function App() {
       point_cost: Number.parseInt(data.get("point_cost") as string),
       enabled: data.get("enabled") != null
     };
-    return new_command;
 
 
   }
   function create_comando(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    var formData = new FormData(e.target);
+    const formData = new FormData(e.target);
     let new_command = prepare_data_command(formData);
     let tmpCommands: Array<Command>
     if (commands != undefined) {

@@ -1,26 +1,26 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ResponseChatters {
-    pub data: Vec<ChatterList>,
-    pub pagination: PaginationTwitch,
+pub struct TwitchResponseChatters {
+    pub data: Vec<TwitchChatterList>,
+    pub pagination: TwitchPagination,
     pub total: u128,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PaginationTwitch {
+pub struct TwitchPagination {
     cursor: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ChatterList {
+pub struct TwitchChatterList {
     pub user_id: String,
     pub user_login: String,
     pub user_name: String,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct AccessTokenResponseTwitch {
+pub struct TwitchAccessTokenResponse {
     pub access_token: String,
     pub expires_in: u32,
     pub refresh_token: String,
@@ -29,12 +29,12 @@ pub struct AccessTokenResponseTwitch {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct GetUsersTwitch {
-    pub data: Vec<UsersTwitchApi>,
+pub struct TwitchGetUsers {
+    pub data: Vec<TwitchUsersApi>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct UsersTwitchApi {
+pub struct TwitchUsersApi {
     pub id: String,
     login: String,
     display_name: String,
@@ -47,7 +47,7 @@ pub struct UsersTwitchApi {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct MessageTwitchEvent {
+pub struct TwitchMessageEvent {
     pub broadcaster_user_id: String,
     pub broadcaster_user_login: String,
     pub broadcaster_user_name: String,
@@ -60,9 +60,9 @@ pub struct MessageTwitchEvent {
     pub message_id: String,
     pub source_message_id: Option<String>,
     pub is_source_only: Option<String>,
-    pub message: MessageEventData,
+    pub message: TwitchMessageEventData,
     pub color: String,
-    pub badges: Vec<MessageEventBadges>,
+    pub badges: Vec<TwitchMessageEventBadges>,
     pub source_badges: Option<String>,
     pub message_type: String,
     pub cheer: Option<String>,
@@ -73,19 +73,19 @@ pub struct MessageTwitchEvent {
 
 #[derive(Serialize, Deserialize, Debug)]
 
-pub struct MessageEventData {
+pub struct TwitchMessageEventData {
     pub text: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct MessageEventBadges {
+pub struct TwitchMessageEventBadges {
     pub set_id: String,
     pub id: String,
     pub info: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RedeemTwitchEvent {
+pub struct TwitchRedeemEvent {
     pub broadcaster_user_id: String,
     pub broadcaster_user_login: String,
     pub broadcaster_user_name: String,
@@ -96,12 +96,22 @@ pub struct RedeemTwitchEvent {
     pub user_input: String,
     pub status: String,
     pub redeemed_at: String,
-    pub reward: RedeemTwitchEventReward,
+    pub reward: TwitchRedeemEventReward,
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RedeemTwitchEventReward {
+pub struct TwitchRedeemEventReward {
     pub id: String,
     pub title: String,
     pub prompt: String,
     pub cost: u128,
+}
+
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TwitchPointUserStruct {
+    pub points: u32,
+    pub user_id: String,
+    pub time_watch_mins: u32,
+    pub last_known_name: String,
+    pub existe_db: bool,
 }

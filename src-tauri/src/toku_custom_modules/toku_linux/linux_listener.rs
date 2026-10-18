@@ -2,21 +2,20 @@ use std::{fs};
 
 use evdev::{AttributeSetRef, Device, EventSummary, KeyCode};
 use tauri::{AppHandle, Emitter};
+use crate::toku_custom_modules::toku_db::db_controller::db_check_shorcut_and_use;
 
-use crate::db_controller;
-
-pub async fn start_check_hotkeys(app: AppHandle) {
+pub async fn linux_start_check_hotkeys(app: AppHandle) {
     let paths = fs::read_dir("/dev/input/").unwrap();
     for path in paths {
         let path_check = path.unwrap();
         let path_dir = path_check.file_name().display().to_string();
         if !path_check.file_type().unwrap().is_dir() {
-            tokio::spawn(key_listener(path_dir, app.clone()));
+            tokio::spawn(linux_key_listener(path_dir, app.clone()));
         }
     }
 }
 
-async fn key_listener(path: String, app: AppHandle) {
+async fn linux_key_listener(path: String, app: AppHandle) {
     let device_test = Device::open(format!("/dev/input/{}", path));
     if device_test.is_ok() {
         let mut device = device_test.unwrap();
@@ -42,7 +41,7 @@ async fn key_listener(path: String, app: AppHandle) {
                             keys_pressed_vect_string.sort();
                             keys_pressed_vect_string.sort_by(|a,b| b.len().cmp(&a.len()));
                             let keys_pressed_string = keys_pressed_vect_string.join(" + ");
-                            let _r = db_controller::check_shorcut_and_use(keys_pressed_string).await;
+                            let _r = db_check_shorcut_and_use(keys_pressed_string).await;
                         }
                         EventSummary::Key(_ev, key_type, 0) => {
                             let emit =
@@ -60,7 +59,7 @@ async fn key_listener(path: String, app: AppHandle) {
                                 let _r = app.emit("hotkey-pressed", resp);
                                 std::env::set_var("ListenForNewShorcut", "N");
                             }
-                            
+
                             let index: Option<usize> = keys_pressed
                                 .iter()
                                 .position(|r: &KeyCode| r.code() == key_type.code());

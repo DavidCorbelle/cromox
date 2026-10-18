@@ -2,13 +2,14 @@ use reqwest::{header::CONTENT_TYPE, Client, Response, StatusCode};
 use tauri::http::HeaderMap;
 
 use crate::{
-    consts::SUSCRIBERS_TWITCH,
+    consts::SUBSCRIBERS_TWITCH,
     secret_const::{ CLIENT_ID},
-    structs_custom, structs_twitch_api,
+    structs_custom,
     consts::{BOT_TOKEN_TYPE, STREAMER_TOKEN_TYPE}
 };
+use crate::toku_custom_modules::toku_twitch::structs_twitch::{TwitchGetUsers, TwitchUsersApi};
 
-fn get_auth_headers(type_token: &str) -> HeaderMap {
+fn twitch_get_auth_headers(type_token: &str) -> HeaderMap {
     let mut token: String = String::from("");
     if type_token == STREAMER_TOKEN_TYPE {
         token = std::env::var("tokenStreamer").unwrap_or(String::from(""));
@@ -24,13 +25,13 @@ fn get_auth_headers(type_token: &str) -> HeaderMap {
     );
     return headers;
 }
-pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwest::Error> {
+pub async fn twitch_implement_subscribers(session_id: &str) -> Result<StatusCode, reqwest::Error> {
     let broadcaster_id: String = std::env::var("broadcaster_id").unwrap_or(String::from(""));
     const URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
     let client: Client = reqwest::Client::new();
-    let headers: HeaderMap = get_auth_headers(STREAMER_TOKEN_TYPE);
+    let headers: HeaderMap = twitch_get_auth_headers(STREAMER_TOKEN_TYPE);
     let mut status: StatusCode = StatusCode::ACCEPTED;
-    for rw in SUSCRIBERS_TWITCH {
+    for rw in SUBSCRIBERS_TWITCH {
         let json_fake: structs_custom::BodyRequestSuscriber =
             structs_custom::BodyRequestSuscriber {
                 type_string: String::from(rw.to_owned()),
@@ -52,7 +53,7 @@ pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwes
             .headers(headers.clone())
             .send()
             .await?;
-        
+
         status = response.status();
         if status.is_client_error(){
             break;
@@ -62,13 +63,13 @@ pub async fn implement_suscribers(session_id: &str) -> Result<StatusCode, reqwes
     Ok(status)
 }
 
-pub async fn send_message_twitch(message: &str) -> Result<Response, reqwest::Error> {
+pub async fn twitch_send_message(message: &str) -> Result<Response, reqwest::Error> {
     let client: Client = reqwest::Client::new();
     let broadcaster_id: String = std::env::var("broadcaster_id").unwrap();
     let bot_id: String = std::env::var("bot_id").unwrap();
 
     const URL: &str = "https://api.twitch.tv/helix/chat/messages";
-    let headers: HeaderMap = get_auth_headers(BOT_TOKEN_TYPE);
+    let headers: HeaderMap = twitch_get_auth_headers(BOT_TOKEN_TYPE);
     let json_data: structs_custom::BodyRequestSendMessageTwitch =
         structs_custom::BodyRequestSendMessageTwitch {
             broadcaster_id: String::from(broadcaster_id),
@@ -86,25 +87,25 @@ pub async fn send_message_twitch(message: &str) -> Result<Response, reqwest::Err
     Ok(response)
 }
 
-pub async fn get_chatters_twitch() -> Response {
+pub async fn twitch_get_chatters() -> Response {
     let client: Client = reqwest::Client::new();
     let broadcaster_id: String = std::env::var("broadcaster_id").unwrap();
     let bot_id: String = std::env::var("bot_id").unwrap();
     let url: String = format!("https://api.twitch.tv/helix/chat/chatters?broadcaster_id={broadcaster_id}&moderator_id={bot_id}&first=1000");
-    let headers: HeaderMap = get_auth_headers(BOT_TOKEN_TYPE);
+    let headers: HeaderMap = twitch_get_auth_headers(BOT_TOKEN_TYPE);
     let response: Response = client.get(url).headers(headers).send().await.unwrap();
     return response;
 }
 
-pub async fn get_id_user_twitch(type_token: &str) -> Result<String, ()> {
+pub async fn twitch_get_id_user(type_token: &str) -> Result<String, ()> {
     let client: Client = reqwest::Client::new();
     let url: String = format!("https://api.twitch.tv/helix/users");
-    let headers: HeaderMap = get_auth_headers(type_token);
+    let headers: HeaderMap = twitch_get_auth_headers(type_token);
     let response: Response = client.get(url).headers(headers).send().await.unwrap();
     let response_string = response.text().await.unwrap();
-    let response_object: structs_twitch_api::GetUsersTwitch =
+    let response_object: TwitchGetUsers =
         serde_json::from_str(&response_string).unwrap();
-    let user: &structs_twitch_api::UsersTwitchApi = response_object.data.get(0).unwrap();
+    let user: &TwitchUsersApi = response_object.data.get(0).unwrap();
     let user_id: String = user.id.clone();
     Ok(String::from(user_id))
 }
